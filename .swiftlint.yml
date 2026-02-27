@@ -1,0 +1,11 @@
+opt_in_rules:
+  - empty_count
+  - explicit_init
+included:
+  - Sources
+  - Tests
+excluded:
+  - .build
+line_length:
+  warning: 140
+  error: 180
