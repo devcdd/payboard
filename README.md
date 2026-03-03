@@ -38,6 +38,32 @@ swift build
 swift test
 ```
 
+## Supabase backup bootstrap
+1. Create env file:
+```bash
+cp .env.supabase.example .env.supabase
+```
+2. Fill `SUPABASE_DB_URL` in `.env.supabase`.
+3. Apply schema:
+```bash
+./scripts/supabase/apply_schema.sh
+```
+
+Files:
+- `scripts/supabase/schema.sql`: backup tables + RLS policies
+- `scripts/supabase/apply_schema.sh`: schema apply helper
+- `scripts/supabase/generate_apple_client_secret.sh`: Apple client secret(JWT) generator for Supabase
+- `.env.supabase.example`: env template
+
+Apple client secret generation example:
+```bash
+./scripts/supabase/generate_apple_client_secret.sh \
+  --team-id YOUR_TEAM_ID \
+  --key-id YOUR_KEY_ID \
+  --client-id YOUR_SERVICES_ID \
+  --p8-file /absolute/path/AuthKey_XXXXXX.p8
+```
+
 ## Notes
 - This repository is currently Swift Package based for fast bootstrap and modularization.
 - For full iPhone shipping workflows (signing, TestFlight, assets), add an Xcode iOS App project shell that references these modules.

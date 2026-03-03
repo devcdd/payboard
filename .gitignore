@@ -18,3 +18,12 @@ xcuserdata/
 .netrc
 .env
 .env.local
+.env.supabase
+Configs/Secrets.xcconfig
+Secrets.xcconfig
+Secrets 2.xcconfig
+PayBoardiOS/PayBoardiOS-Info.plist
+cert/
+*.p8
+*.cer
+*.pem

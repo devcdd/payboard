@@ -12,7 +12,12 @@ struct PayBoardApp: App {
     init() {
         let environment = AppEnvironment.live()
         self.environment = environment
-        _settingsViewModel = StateObject(wrappedValue: SettingsViewModel(scheduler: environment.notificationScheduler))
+        _settingsViewModel = StateObject(
+            wrappedValue: SettingsViewModel(
+                scheduler: environment.notificationScheduler,
+                repository: environment.repository
+            )
+        )
         _boardViewModel = StateObject(wrappedValue: BoardViewModel(
             repository: environment.repository,
             notificationScheduler: environment.notificationScheduler
@@ -22,16 +27,23 @@ struct PayBoardApp: App {
     var body: some Scene {
         WindowGroup {
             TabView {
-                BoardView(viewModel: boardViewModel, settingsViewModel: settingsViewModel)
+                BoardView(viewModel: boardViewModel, settingsViewModel: settingsViewModel, displayMode: .board)
                     .tabItem {
-                        Label("보드", systemImage: "square.grid.2x2")
+                        Label("tab.board", systemImage: "square.grid.2x2")
+                    }
+
+                BoardView(viewModel: boardViewModel, settingsViewModel: settingsViewModel, displayMode: .calendar)
+                    .tabItem {
+                        Label("tab.calendar", systemImage: "calendar")
                     }
 
                 SettingsView(viewModel: settingsViewModel)
                     .tabItem {
-                        Label("설정", systemImage: "gearshape")
+                        Label("tab.settings", systemImage: "gearshape")
                     }
             }
+            .preferredColorScheme(settingsViewModel.preferredColorScheme)
+            .environment(\.locale, settingsViewModel.preferredLocale)
         }
     }
 }

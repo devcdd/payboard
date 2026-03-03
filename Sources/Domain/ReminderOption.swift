@@ -5,14 +5,14 @@ public enum ReminderOption: Int, CaseIterable, Codable, Sendable {
     case oneDay = 1
     case sameDay = 0
 
-    public var label: String {
+    public var labelKey: String {
         switch self {
         case .threeDays:
-            return "3일 전"
+            return "reminder.threeDays"
         case .oneDay:
-            return "1일 전"
+            return "reminder.oneDay"
         case .sameDay:
-            return "당일"
+            return "reminder.sameDay"
         }
     }
 }
