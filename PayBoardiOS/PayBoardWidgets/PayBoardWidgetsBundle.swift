@@ -146,32 +146,38 @@ private struct EarliestThreeWidgetView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 0) {
             if family != .systemSmall {
                 Text("다가오는 결제 3개")
                     .font(.headline)
+                    .padding(.bottom, 12)
             }
             if entry.subscriptions.isEmpty {
                 Text("표시할 항목이 없습니다")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .padding(.top, 2)
             } else {
-                ForEach(entry.subscriptions) { item in
-                    HStack {
-                        subscriptionIcon(item)
-                        Text(item.name)
-                            .lineLimit(1)
-                        Spacer()
-                        if family != .systemSmall {
-                            Text(item.nextBillingDate, style: .date)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(entry.subscriptions) { item in
+                        HStack {
+                            subscriptionIcon(item)
+                            Text(item.name)
+                                .lineLimit(1)
+                            Spacer()
+                            if family != .systemSmall {
+                                Text(item.nextBillingDate, style: .date)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            indicatorDot(for: item.nextBillingDate)
                         }
-                        indicatorDot(for: item.nextBillingDate)
                     }
                 }
             }
         }
+        .padding(.top, family == .systemSmall ? -2 : -6)
+        .padding(.bottom, 1)
         .containerBackground(.fill.tertiary, for: .widget)
     }
 }
