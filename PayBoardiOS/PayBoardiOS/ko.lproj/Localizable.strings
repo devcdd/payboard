@@ -1,5 +1,6 @@
 "tab.board" = "보드";
 "tab.calendar" = "캘린더";
+"tab.archive" = "보관함";
 "tab.settings" = "설정";
 
 "common.edit" = "수정";
@@ -38,6 +39,15 @@
 "settings.backup.signIn.restorePrompt.skip" = "건너뛰기";
 "settings.backup.signOut.success" = "로그아웃되었습니다.";
 "settings.backup.signOut.failed" = "로그아웃에 실패했습니다.";
+"settings.backup.deleteAccount" = "회원탈퇴";
+"settings.backup.deleteAccount.inProgress" = "회원탈퇴 처리 중...";
+"settings.backup.deleteAccount.success" = "회원탈퇴가 완료되었습니다.";
+"settings.backup.deleteAccount.failed" = "회원탈퇴에 실패했습니다.";
+"settings.backup.deleteAccount.serverNotConfigured" = "회원탈퇴 서버 설정이 없어 탈퇴를 진행할 수 없습니다.";
+"settings.backup.deleteAccount.confirm.title" = "회원탈퇴 하시겠습니까?";
+"settings.backup.deleteAccount.confirm.message" = "회원탈퇴 시 백업 데이터와 계정 데이터가 모두 삭제되며 복구할 수 없습니다.";
+"settings.backup.deleteAccount.confirm.message.account" = "%@ 계정을 탈퇴하면 백업 데이터와 계정 데이터가 모두 삭제되며 복구할 수 없습니다.";
+"settings.backup.deleteAccount.confirm.confirm" = "회원탈퇴";
 "settings.backup.upload.button" = "지금 백업";
 "settings.backup.restore.button" = "최신 백업 복원";
 "settings.backup.latestAt" = "최근 백업: %@";
@@ -65,6 +75,17 @@
 "settings.appearance.system" = "시스템 설정";
 "settings.appearance.light" = "라이트 모드";
 "settings.appearance.dark" = "다크 모드";
+"settings.section.board" = "보드 설정";
+"settings.board.searchVisible" = "검색창 표시";
+"settings.board.searchVisible.caption" = "대부분의 사용 환경에서 검색이 필요 없다면 검색창을 숨길 수 있습니다.";
+"settings.initialScreen.picker" = "초기화면";
+"settings.initialScreen.caption" = "앱 실행 시 처음 열릴 화면을 선택합니다.";
+"settings.initialScreen.board" = "보드";
+"settings.initialScreen.calendar" = "캘린더";
+"settings.section.contact" = "문의";
+"settings.contact.email" = "이메일 문의";
+"settings.contact.instagram" = "인스타그램";
+"settings.contact.caption" = "문의/피드백은 이메일 또는 인스타그램으로 보내주세요.";
 
 "board.title" = "페이보드";
 "board.empty.title" = "고정지출이 없습니다";
@@ -88,10 +109,18 @@
 "board.sort.custom.done" = "편집 완료";
 "board.selection.enter" = "선택";
 "board.selection.count" = "%d개 선택";
+"board.selection.exit" = "선택모드 취소";
+"board.add" = "정기결제 추가";
 "board.bulk.delete" = "일괄 삭제";
 "board.bulk.complete" = "결제 완료";
+"board.bulk.cancelComplete" = "결제 취소";
+"board.bulk.archive" = "보관";
 "board.bulk.changeDate" = "결제일 수정";
 "board.action.completePayment" = "결제 완료";
+"board.action.cancelPayment" = "결제 취소";
+"board.action.archive" = "보관";
+"board.action.pin" = "상단 고정";
+"board.action.unpin" = "고정 해제";
 "board.delete.confirm.title" = "삭제하시겠습니까?";
 "board.delete.confirm.single.message" = "선택한 항목을 삭제합니다.";
 "board.delete.confirm.bulk.message" = "%d개 항목을 삭제합니다.";
@@ -115,6 +144,10 @@
 "board.calendar.weekday.sat" = "토";
 
 "subscription.nextBilling" = "다음 결제일";
+"subscription.paymentStatus" = "결제 상태";
+"subscription.paymentDone" = "결제 완료";
+"subscription.paymentPending" = "결제 예정";
+"subscription.autoPay" = "자동이체";
 
 "category.video" = "비디오";
 "category.music" = "음악";
@@ -133,7 +166,7 @@
 "reminder.sameDay" = "당일";
 
 "service_editor.section.basic" = "기본 정보";
-"service_editor.name" = "서비스 이름";
+"service_editor.name" = "정기결제 항목을 입력하세요";
 "service_editor.category" = "카테고리";
 "service_editor.amount" = "금액";
 "service_editor.amount.suffix" = "원";
@@ -144,6 +177,8 @@
 "service_editor.billing.yearly" = "매년";
 "service_editor.billing.custom30" = "30일";
 "service_editor.notificationsEnabled" = "알림 받기";
+"service_editor.autoPayEnabled" = "자동이체";
+"service_editor.pinned" = "상단 고정";
 "service_editor.section.icon" = "아이콘";
 "service_editor.icon.color" = "아이콘 색상";
 "service_editor.icon.search" = "아이콘 검색";
@@ -152,12 +187,20 @@
 "service_editor.title.new" = "고정지출 추가";
 "service_editor.title.edit" = "고정지출 수정";
 "service_editor.validation.amount" = "금액은 0보다 커야 합니다.";
-"service_editor.validation.name" = "서비스 이름을 입력하세요.";
+"service_editor.validation.name" = "정기결제 항목을 입력하세요.";
 
 "notification.title" = "결제 예정 알림";
 "notification.body" = "%@ 결제가 곧 예정되어 있습니다.";
+"notification.autopay.body.today" = "%@ 서비스가 오늘 자동이체 될 예정입니다.";
+"notification.autopay.body.tomorrow" = "%@ 서비스가 내일 자동이체 될 예정입니다.";
+"notification.autopay.body.dayAfterTomorrow" = "%@ 서비스가 이틀 후 자동이체 될 예정입니다.";
+"notification.autopay.body.default" = "%@ 서비스가 자동이체 될 예정입니다.";
 "notification.test.title" = "리마인드 테스트";
 "notification.test.body" = "페이보드 테스트 알림입니다.";
+
+"archive.empty.title" = "보관된 항목이 없습니다";
+"archive.empty.description" = "보관한 항목은 여기에서 복원할 수 있습니다.";
+"archive.action.restore" = "복원";
 
 "service_editor.category.custom" = "커스텀 카테고리";
 
@@ -177,7 +220,7 @@
 "icon.name.disney_plus" = "디즈니플러스";
 "icon.name.duolingo" = "듀오링고";
 "icon.name.naver_plus" = "네이버 플러스";
-"icon.name.millie" = "밀리";
+"icon.name.millie" = "밀리의 서재";
 "icon.name.electricity" = "한전";
 "icon.name.gas_app" = "가스앱";
 "icon.name.icloud_plus" = "아이클라우드";
@@ -194,3 +237,10 @@
 "icon.name.chatgpt_plus" = "GPT";
 "icon.name.github" = "깃허브";
 "icon.name.dropbox" = "드롭박스";
+"icon.name.aws" = "AWS";
+"icon.name.naver_cloud_platform" = "네이버 클라우드 플랫폼";
+"icon.name.apple_tv" = "애플 TV";
+"icon.name.gemini" = "제미나이";
+"icon.name.google_cloud" = "구글 클라우드";
+"icon.name.google_playpass" = "구글 플레이 패스";
+"icon.name.tving" = "티빙";

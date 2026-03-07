@@ -1,5 +1,6 @@
 "tab.board" = "Board";
 "tab.calendar" = "Calendar";
+"tab.archive" = "Archive";
 "tab.settings" = "Settings";
 
 "common.edit" = "Edit";
@@ -38,6 +39,15 @@
 "settings.backup.signIn.restorePrompt.skip" = "Skip";
 "settings.backup.signOut.success" = "Signed out successfully.";
 "settings.backup.signOut.failed" = "Failed to sign out.";
+"settings.backup.deleteAccount" = "Delete account";
+"settings.backup.deleteAccount.inProgress" = "Deleting account...";
+"settings.backup.deleteAccount.success" = "Your account has been deleted.";
+"settings.backup.deleteAccount.failed" = "Failed to delete your account.";
+"settings.backup.deleteAccount.serverNotConfigured" = "Account deletion is unavailable because the server URL is missing.";
+"settings.backup.deleteAccount.confirm.title" = "Delete your account?";
+"settings.backup.deleteAccount.confirm.message" = "Deleting your account will permanently remove your backup data and account data. This cannot be undone.";
+"settings.backup.deleteAccount.confirm.message.account" = "Deleting %@ will permanently remove your backup data and account data. This cannot be undone.";
+"settings.backup.deleteAccount.confirm.confirm" = "Delete Account";
 "settings.backup.upload.button" = "Back up now";
 "settings.backup.restore.button" = "Restore latest backup";
 "settings.backup.latestAt" = "Last backup: %@";
@@ -65,6 +75,17 @@
 "settings.appearance.system" = "System";
 "settings.appearance.light" = "Light";
 "settings.appearance.dark" = "Dark";
+"settings.section.board" = "Board Settings";
+"settings.board.searchVisible" = "Show search bar";
+"settings.board.searchVisible.caption" = "Hide the search bar if search is rarely needed in your workflow.";
+"settings.initialScreen.picker" = "Initial screen";
+"settings.initialScreen.caption" = "Choose which screen opens first when the app launches.";
+"settings.initialScreen.board" = "Board";
+"settings.initialScreen.calendar" = "Calendar";
+"settings.section.contact" = "Contact";
+"settings.contact.email" = "Email Support";
+"settings.contact.instagram" = "Instagram";
+"settings.contact.caption" = "Send feedback or inquiries via email or Instagram.";
 
 "board.title" = "Pay Board";
 "board.empty.title" = "No fixed expenses";
@@ -88,10 +109,18 @@
 "board.sort.custom.done" = "Done editing";
 "board.selection.enter" = "Select";
 "board.selection.count" = "%d selected";
+"board.selection.exit" = "Exit Selection";
+"board.add" = "Add Subscription";
 "board.bulk.delete" = "Delete";
 "board.bulk.complete" = "Payment complete";
+"board.bulk.cancelComplete" = "Cancel payment";
+"board.bulk.archive" = "Archive";
 "board.bulk.changeDate" = "Change date";
 "board.action.completePayment" = "Mark payment complete";
+"board.action.cancelPayment" = "Cancel payment";
+"board.action.archive" = "Archive";
+"board.action.pin" = "Pin to top";
+"board.action.unpin" = "Unpin";
 "board.delete.confirm.title" = "Are you sure you want to delete?";
 "board.delete.confirm.single.message" = "This will delete the selected item.";
 "board.delete.confirm.bulk.message" = "This will delete %d items.";
@@ -115,6 +144,10 @@
 "board.calendar.weekday.sat" = "Sat";
 
 "subscription.nextBilling" = "Next billing date";
+"subscription.paymentStatus" = "Payment status";
+"subscription.paymentDone" = "Paid";
+"subscription.paymentPending" = "Pending";
+"subscription.autoPay" = "Auto Pay";
 
 "category.video" = "Video";
 "category.music" = "Music";
@@ -133,7 +166,7 @@
 "reminder.sameDay" = "On the day";
 
 "service_editor.section.basic" = "Basic Info";
-"service_editor.name" = "Service name";
+"service_editor.name" = "Enter a recurring payment item";
 "service_editor.category" = "Category";
 "service_editor.amount" = "Amount";
 "service_editor.amount.suffix" = "KRW";
@@ -144,6 +177,8 @@
 "service_editor.billing.yearly" = "Yearly";
 "service_editor.billing.custom30" = "30 Days";
 "service_editor.notificationsEnabled" = "Receive notifications";
+"service_editor.autoPayEnabled" = "Auto pay";
+"service_editor.pinned" = "Pin to top";
 "service_editor.section.icon" = "Icon";
 "service_editor.icon.color" = "Icon color";
 "service_editor.icon.search" = "Search icons";
@@ -152,12 +187,20 @@
 "service_editor.title.new" = "Add Fixed Expense";
 "service_editor.title.edit" = "Edit Fixed Expense";
 "service_editor.validation.amount" = "Amount must be greater than 0.";
-"service_editor.validation.name" = "Please enter a service name.";
+"service_editor.validation.name" = "Please enter a recurring payment item.";
 
 "notification.title" = "Upcoming payment";
 "notification.body" = "%@ payment is due soon.";
+"notification.autopay.body.today" = "%@ will be charged by auto pay today.";
+"notification.autopay.body.tomorrow" = "%@ will be charged by auto pay tomorrow.";
+"notification.autopay.body.dayAfterTomorrow" = "%@ will be charged by auto pay in two days.";
+"notification.autopay.body.default" = "%@ will be charged by auto pay soon.";
 "notification.test.title" = "Reminder Test";
 "notification.test.body" = "This is a PayBoard test reminder.";
+
+"archive.empty.title" = "No archived items";
+"archive.empty.description" = "Archived items can be restored here.";
+"archive.action.restore" = "Restore";
 
 "service_editor.category.custom" = "Custom category";
 
@@ -194,3 +237,10 @@
 "icon.name.chatgpt_plus" = "ChatGPT Plus";
 "icon.name.github" = "GitHub";
 "icon.name.dropbox" = "Dropbox";
+"icon.name.aws" = "AWS";
+"icon.name.naver_cloud_platform" = "Naver Cloud Platform";
+"icon.name.apple_tv" = "Apple TV+";
+"icon.name.gemini" = "Gemini";
+"icon.name.google_cloud" = "Google Cloud";
+"icon.name.google_playpass" = "Google Play Pass";
+"icon.name.tving" = "TVING";
