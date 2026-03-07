@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		6E21022D2F517B4C00024992 /* AppCore in Frameworks */ = {isa = PBXBuildFile; productRef = 6E21022C2F517B4C00024992 /* AppCore */; };
 		6E2102352F517B4C00024992 /* Features in Frameworks */ = {isa = PBXBuildFile; productRef = 6E2102342F517B4C00024992 /* Features */; };
+		6ED761ED2F5C54850079FF0C /* Payboard.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 6ED761EC2F5C54850079FF0C /* Payboard.xcconfig */; };
 		A1B2C3092F60000100024992 /* PayBoardWidgets.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = A1B2C3012F60000100024992 /* PayBoardWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
@@ -54,7 +55,7 @@
 		6E2101CF2F5177FB00024992 /* PayBoardiOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PayBoardiOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		6E2101DC2F5177FC00024992 /* PayBoardiOSTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PayBoardiOSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		6E2101E62F5177FC00024992 /* PayBoardiOSUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PayBoardiOSUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		6EB291462F5475D8008F88F6 /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
+		6ED761EC2F5C54850079FF0C /* Payboard.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Payboard.xcconfig; sourceTree = "<group>"; };
 		A1B2C3012F60000100024992 /* PayBoardWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PayBoardWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -118,13 +119,13 @@
 		6E2101C62F5177FB00024992 = {
 			isa = PBXGroup;
 			children = (
+				6ED761EC2F5C54850079FF0C /* Payboard.xcconfig */,
 				6E2101D12F5177FB00024992 /* PayBoardiOS/PayBoardiOS */,
 				A1B2C3022F60000100024992 /* PayBoardiOS/PayBoardWidgets */,
 				6E2101DF2F5177FC00024992 /* PayBoardiOS/PayBoardiOSTests */,
 				6E2101E92F5177FC00024992 /* PayBoardiOS/PayBoardiOSUITests */,
 				6E2102262F5179DD00024992 /* Frameworks */,
 				6E2101D02F5177FB00024992 /* Products */,
-				6EB291462F5475D8008F88F6 /* Secrets.xcconfig */,
 			);
 			sourceTree = "<group>";
 		};
@@ -321,6 +322,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				6ED761ED2F5C54850079FF0C /* Payboard.xcconfig in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -378,7 +380,7 @@
 /* Begin XCBuildConfiguration section */
 		6E2101EE2F5177FC00024992 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 6EB291462F5475D8008F88F6 /* Secrets.xcconfig */;
+			baseConfigurationReference = 6ED761EC2F5C54850079FF0C /* Payboard.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -443,7 +445,7 @@
 		};
 		6E2101EF2F5177FC00024992 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 6EB291462F5475D8008F88F6 /* Secrets.xcconfig */;
+			baseConfigurationReference = 6ED761EC2F5C54850079FF0C /* Payboard.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -501,7 +503,7 @@
 		};
 		6E2101F12F5177FC00024992 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 6EB291462F5475D8008F88F6 /* Secrets.xcconfig */;
+			baseConfigurationReference = 6ED761EC2F5C54850079FF0C /* Payboard.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -537,7 +539,7 @@
 		};
 		6E2101F22F5177FC00024992 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 6EB291462F5475D8008F88F6 /* Secrets.xcconfig */;
+			baseConfigurationReference = 6ED761EC2F5C54850079FF0C /* Payboard.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;

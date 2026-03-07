@@ -23,6 +23,7 @@ xcuserdata/
 Configs/Secrets.xcconfig
 Secrets.xcconfig
 Secrets 2.xcconfig
+Payboard.xcconfig
 PayboardConfig.xcconfig
 cert/
 *.p8
