@@ -6,6 +6,8 @@ public struct SubscriptionCardView: View {
     public let presetIcon: PresetIcon?
     public let showIcon: Bool
     public let showDateBelowLabel: Bool
+    public let referenceMonth: Date
+    public let billingDateOverride: Date?
     public let onTapIcon: (() -> Void)?
 
     public init(
@@ -13,12 +15,16 @@ public struct SubscriptionCardView: View {
         presetIcon: PresetIcon?,
         showIcon: Bool = true,
         showDateBelowLabel: Bool = false,
+        referenceMonth: Date = .now,
+        billingDateOverride: Date? = nil,
         onTapIcon: (() -> Void)? = nil
     ) {
         self.subscription = subscription
         self.presetIcon = presetIcon
         self.showIcon = showIcon
         self.showDateBelowLabel = showDateBelowLabel
+        self.referenceMonth = referenceMonth
+        self.billingDateOverride = billingDateOverride
         self.onTapIcon = onTapIcon
     }
 
@@ -46,13 +52,33 @@ public struct SubscriptionCardView: View {
                         .minimumScaleFactor(0.85)
                     if let customCategoryName = subscription.customCategoryName,
                        subscription.category == .other {
-                        Text(customCategoryName)
-                            .font(.caption2)
-                            .foregroundStyle(Color.payMuted)
+                        HStack(spacing: 4) {
+                            Text(customCategoryName)
+                                .font(.caption2)
+                                .foregroundStyle(Color.payMuted)
+                            if subscription.isAutoPayEnabled {
+                                Text(verbatim: "·")
+                                    .font(.caption2)
+                                    .foregroundStyle(Color.payMuted)
+                                Text("subscription.autoPay")
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(Color.green)
+                            }
+                        }
                     } else {
-                        Text(LocalizedStringKey(subscription.category.labelKey))
-                            .font(.caption2)
-                            .foregroundStyle(Color.payMuted)
+                        HStack(spacing: 4) {
+                            Text(LocalizedStringKey(subscription.category.labelKey))
+                                .font(.caption2)
+                                .foregroundStyle(Color.payMuted)
+                            if subscription.isAutoPayEnabled {
+                                Text(verbatim: "·")
+                                    .font(.caption2)
+                                    .foregroundStyle(Color.payMuted)
+                                Text("subscription.autoPay")
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(Color.green)
+                            }
+                        }
                     }
                 }
 
@@ -74,7 +100,7 @@ public struct SubscriptionCardView: View {
                 }
             } else {
                 HStack {
-                    Text("subscription.nextBilling")
+                    Text(isPaidForReferenceMonth ? "subscription.paymentStatus" : "subscription.nextBilling")
                         .font(.caption2)
                         .foregroundStyle(Color.payMuted)
                     Spacer()
@@ -137,15 +163,18 @@ public struct SubscriptionCardView: View {
     }
 
     private var formattedDate: String {
+        if isPaidForReferenceMonth {
+            return NSLocalizedString("subscription.paymentDone", comment: "")
+        }
         let formatter = DateFormatter()
         formatter.locale = .autoupdatingCurrent
         formatter.dateStyle = .medium
         formatter.timeStyle = .none
-        return formatter.string(from: subscription.nextBillingDate)
+        return formatter.string(from: effectiveBillingDate)
     }
 
     private var cardBackgroundColor: Color {
-        if isPaidForCurrentCycle {
+        if isPaidForReferenceMonth {
             return Color.green.opacity(0.18)
         }
         if daysUntilBilling <= 1 {
@@ -160,11 +189,18 @@ public struct SubscriptionCardView: View {
     private var daysUntilBilling: Int {
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: .now)
-        let billingDay = calendar.startOfDay(for: subscription.nextBillingDate)
+        let billingDay = calendar.startOfDay(for: effectiveBillingDate)
         return calendar.dateComponents([.day], from: today, to: billingDay).day ?? Int.max
     }
 
+    private var effectiveBillingDate: Date {
+        billingDateOverride ?? subscription.nextBillingDate
+    }
+
     private var isPaidForCurrentCycle: Bool {
+        if isPaidForReferenceMonth {
+            return true
+        }
         guard let lastPaymentDate = subscription.lastPaymentDate else { return false }
         let calendar = Calendar.current
         let previousDate: Date
@@ -177,5 +213,10 @@ public struct SubscriptionCardView: View {
             previousDate = calendar.date(byAdding: .day, value: -max(1, days), to: subscription.nextBillingDate) ?? subscription.nextBillingDate
         }
         return lastPaymentDate >= previousDate && lastPaymentDate < subscription.nextBillingDate
+    }
+
+    private var isPaidForReferenceMonth: Bool {
+        guard let lastPaymentDate = subscription.lastPaymentDate else { return false }
+        return Calendar.current.isDate(lastPaymentDate, equalTo: referenceMonth, toGranularity: .month)
     }
 }

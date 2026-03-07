@@ -4,6 +4,9 @@ import UniformTypeIdentifiers
 import Domain
 import Data
 import DesignSystem
+#if os(iOS)
+import UIKit
+#endif
 
 public enum BoardDisplayMode: String, CaseIterable, Sendable {
     case board
@@ -41,6 +44,7 @@ public struct BoardView: View {
     @State private var hasLoadedCustomSortOrder = false
     @State private var isCustomSortEditing = false
     @State private var draggedCustomSortID: UUID?
+    @State private var lastDropTargetID: UUID?
     @State private var editorSheet: EditorSheet?
     @FocusState private var isBoardSearchFocused: Bool
 
@@ -242,62 +246,7 @@ public struct BoardView: View {
             } else {
                 LazyVGrid(columns: columns, spacing: PayBoardSpacing.md) {
                     ForEach(boardSubscriptions) { subscription in
-                        SubscriptionCardView(
-                            subscription: subscription,
-                            presetIcon: presetIcon(for: subscription.iconKey),
-                            showIcon: !isSmallBoardLayout,
-                            showDateBelowLabel: isSmallBoardLayout,
-                            onTapIcon: isSelectionMode || isCustomDnDEnabled ? nil : {
-                                suppressCardTapSubscriptionID = subscription.id
-                                quickIconQuery = ""
-                                quickIconTarget = subscription
-                                DispatchQueue.main.async {
-                                    suppressCardTapSubscriptionID = nil
-                                }
-                            }
-                        )
-                        .overlay(alignment: .topTrailing) {
-                            if isSelectionMode {
-                                Image(systemName: selectedSubscriptionIDs.contains(subscription.id) ? "checkmark.circle.fill" : "circle")
-                                    .font(.title3.weight(.semibold))
-                                    .foregroundStyle(selectedSubscriptionIDs.contains(subscription.id) ? Color.payAccent : Color.payMuted.opacity(0.8))
-                                    .padding(PayBoardSpacing.xs)
-                            } else if !isSmallBoardLayout && !isCustomDnDEnabled {
-                                cardActionMenu(for: subscription, isCompact: isNormalBoardLayout)
-                                    .padding(PayBoardSpacing.xs)
-                            }
-                        }
-                        .onDrag {
-                            guard isCustomDnDEnabled else { return NSItemProvider() }
-                            draggedCustomSortID = subscription.id
-                            return NSItemProvider(object: subscription.id.uuidString as NSString)
-                        }
-                        .onDrop(of: [UTType.text], delegate: SubscriptionReorderDropDelegate(
-                            targetID: subscription.id,
-                            orderedIDs: $customSortOrderIDs,
-                            draggedID: $draggedCustomSortID,
-                            isEnabled: isCustomDnDEnabled,
-                            onPersist: persistCustomSortOrder
-                        ))
-                        .contentShape(RoundedRectangle(cornerRadius: PayBoardRadius.card))
-                        .onTapGesture {
-                            if suppressCardTapSubscriptionID == subscription.id { return }
-                            if isCustomDnDEnabled { return }
-                            if isSelectionMode {
-                                toggleSelection(for: subscription.id)
-                            } else {
-                                editorSheet = .edit(subscription)
-                            }
-                        }
-                        .onLongPressGesture(minimumDuration: 0.35) {
-                            if isCustomDnDEnabled { return }
-                            if !isSelectionMode {
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    isSelectionMode = true
-                                }
-                            }
-                            toggleSelection(for: subscription.id)
-                        }
+                        subscriptionCard(for: subscription)
                     }
                 }
             }
@@ -432,12 +381,21 @@ public struct BoardView: View {
                         } label: {
                             VStack(spacing: 2) {
                                 Text("\(day.day)")
-                                    .font(.subheadline.weight(day.isSelected ? .semibold : .regular))
+                                    .font(.subheadline.weight(day.isToday ? .bold : (day.isSelected ? .semibold : .regular)))
                                     .foregroundStyle(dayTextColor(for: day))
                                     .frame(width: 32, height: 32)
                                     .background(
                                         Circle()
                                             .fill(day.isSelected ? Color.payAccent.opacity(0.22) : Color.clear)
+                                    )
+                                    .overlay(
+                                        Circle()
+                                            .stroke(
+                                                day.isToday && !day.isSelected
+                                                    ? Color.payAccent.opacity(0.9)
+                                                    : Color.clear,
+                                                lineWidth: 1.5
+                                            )
                                     )
                                 if let marker = calendarMarkerByDate[dateKey(for: day.date)] {
                                     Circle()
@@ -479,11 +437,7 @@ public struct BoardView: View {
                                     .foregroundStyle(Color.primary)
                                     .lineLimit(1)
                                 Spacer()
-                                if let urgency = billingUrgency(for: subscription) {
-                                    Image(systemName: urgency.symbolName)
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(urgency.color)
-                                }
+                                paymentStatusIndicator(for: subscription)
                                 Text(amountText(for: subscription))
                                     .font(.subheadline.weight(.semibold))
                                     .foregroundStyle(Color.primary)
@@ -503,83 +457,110 @@ public struct BoardView: View {
     private var headerRow: some View {
         VStack(spacing: PayBoardSpacing.sm) {
             HStack(spacing: PayBoardSpacing.sm) {
-                Text("board.title")
-                    .font(.title2.weight(.bold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
+                if displayMode == .board {
+                    Button {
+                        selectedYear = Calendar.current.component(.year, from: displayedMonthStart)
+                        selectedMonth = Calendar.current.component(.month, from: displayedMonthStart)
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isPresentingMonthSelector.toggle()
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text(monthTitle(for: displayedMonthStart))
+                                .font(.title2.weight(.bold))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.85)
+                            Image(systemName: isPresentingMonthSelector ? "chevron.up" : "chevron.down")
+                                .font(.caption.weight(.semibold))
+                        }
+                    }
+                    .buttonStyle(.plain)
                     .layoutPriority(1)
+                } else {
+                    Text("board.title")
+                        .font(.title2.weight(.bold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                        .layoutPriority(1)
+                }
 
                 Spacer()
 
                 if displayMode == .board {
-                    if selectedSort == .custom {
+                    if isSelectionMode {
                         Button {
                             withAnimation(.easeInOut(duration: 0.2)) {
-                                isCustomSortEditing.toggle()
-                            }
-                            if isCustomSortEditing {
                                 selectedSubscriptionIDs.removeAll()
                                 isSelectionMode = false
                             }
                         } label: {
-                            Image(systemName: isCustomSortEditing ? "checkmark.circle" : "pencil.circle")
+                            Text("board.selection.exit")
+                                .font(.subheadline.weight(.semibold))
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        sortMenuButton
+
+                        Menu {
+                            ForEach(BoardFilter.allCases) { filter in
+                                Button {
+                                    viewModel.selectedFilter = filter
+                                } label: {
+                                    Text(LocalizedStringKey(filter.titleKey))
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "line.3.horizontal.decrease.circle")
                                 .font(.subheadline.weight(.medium))
                                 .frame(width: 32, height: 32)
                                 .background(Color.payCard)
                                 .clipShape(Circle())
                         }
-                        .accessibilityLabel(Text(isCustomSortEditing ? "board.sort.custom.done" : "board.sort.custom.edit"))
-                    }
+                        .accessibilityLabel(Text("board.filter.picker"))
 
-                    sortMenuButton
-
-                    Menu {
-                        ForEach(BoardFilter.allCases) { filter in
+                        Menu {
                             Button {
-                                viewModel.selectedFilter = filter
+                                columnsCount = 3
                             } label: {
-                                Text(LocalizedStringKey(filter.titleKey))
+                                Label {
+                                    Text("board.layout.small")
+                                } icon: {
+                                    Image(systemName: "square.grid.3x3")
+                                }
                             }
+                            Button {
+                                columnsCount = 2
+                            } label: {
+                                Label {
+                                    Text("board.layout.normal")
+                                } icon: {
+                                    Image(systemName: "square.grid.2x2")
+                                }
+                            }
+                            Button {
+                                columnsCount = 1
+                            } label: {
+                                Label {
+                                    Text("board.layout.max")
+                                } icon: {
+                                    Image(systemName: "rectangle.grid.1x2")
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "square.grid.2x2")
+                                .font(.subheadline.weight(.medium))
+                                .frame(width: 32, height: 32)
+                                .background(Color.payCard)
+                                .clipShape(Circle())
                         }
-                    } label: {
-                        Image(systemName: "line.3.horizontal.decrease.circle")
-                            .font(.subheadline.weight(.medium))
-                            .frame(width: 32, height: 32)
-                            .background(Color.payCard)
-                            .clipShape(Circle())
+                        .accessibilityLabel(Text("board.layout.picker"))
                     }
-                    .accessibilityLabel(Text("board.filter.picker"))
-
-                    Menu {
-                        Button {
-                            columnsCount = 3
-                        } label: {
-                            Text("board.layout.small")
-                        }
-                        Button {
-                            columnsCount = 2
-                        } label: {
-                            Text("board.layout.normal")
-                        }
-                        Button {
-                            columnsCount = 1
-                        } label: {
-                            Text("board.layout.max")
-                        }
-                    } label: {
-                        Image(systemName: "square.grid.3x3")
-                            .font(.subheadline.weight(.medium))
-                            .frame(width: 32, height: 32)
-                            .background(Color.payCard)
-                            .clipShape(Circle())
-                    }
-                    .accessibilityLabel(Text("board.layout.picker"))
 
                 }
 
             }
 
-            if displayMode == .board {
+            if displayMode == .board && !isSelectionMode && settingsViewModel.isBoardSearchVisible {
                 HStack(spacing: 0) {
                     HStack(spacing: PayBoardSpacing.xs) {
                         Image(systemName: "magnifyingglass")
@@ -600,6 +581,11 @@ public struct BoardView: View {
                     .clipShape(RoundedRectangle(cornerRadius: PayBoardRadius.control))
                 }
             }
+
+            if displayMode == .board && !isSelectionMode && isPresentingMonthSelector {
+                inlineMonthPicker
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
         }
         .padding(.horizontal, PayBoardSpacing.lg)
         .padding(.top, PayBoardSpacing.sm)
@@ -617,7 +603,7 @@ public struct BoardView: View {
             Image(systemName: "plus")
                 .font(.title3.weight(.semibold))
                 .frame(width: 52, height: 52)
-                .background(Color.payAccent)
+                .background(Color.payAccent.opacity(0.9))
                 .foregroundStyle(Color.white)
                 .clipShape(Circle())
                 .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
@@ -693,14 +679,6 @@ public struct BoardView: View {
                     .font(.caption)
                     .foregroundStyle(Color.payMuted)
 
-                Button("common.cancel") {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        selectedSubscriptionIDs.removeAll()
-                        isSelectionMode = false
-                    }
-                }
-                .font(.caption.weight(.semibold))
-
                 Spacer()
 
                 Button("board.bulk.changeDate") {
@@ -715,6 +693,30 @@ public struct BoardView: View {
                     let ids = selectedSubscriptionIDs
                     Task {
                         await viewModel.markPaymentComplete(ids: ids)
+                        await MainActor.run {
+                            selectedSubscriptionIDs.removeAll()
+                            isSelectionMode = false
+                        }
+                    }
+                }
+                .font(.caption.weight(.semibold))
+
+                Button("board.bulk.cancelComplete") {
+                    let ids = selectedSubscriptionIDs
+                    Task {
+                        await viewModel.cancelPaymentComplete(ids: ids)
+                        await MainActor.run {
+                            selectedSubscriptionIDs.removeAll()
+                            isSelectionMode = false
+                        }
+                    }
+                }
+                .font(.caption.weight(.semibold))
+
+                Button("board.bulk.archive") {
+                    let ids = selectedSubscriptionIDs
+                    Task {
+                        await viewModel.archive(ids: ids)
                         await MainActor.run {
                             selectedSubscriptionIDs.removeAll()
                             isSelectionMode = false
@@ -770,25 +772,56 @@ public struct BoardView: View {
 
     private var monthSubscriptions: [Subscription] {
         let calendar = Calendar.current
-        let now = Date()
         return viewModel.subscriptions.filter { subscription in
-            calendar.isDate(subscription.nextBillingDate, equalTo: now, toGranularity: .month)
-                && calendar.isDate(subscription.nextBillingDate, equalTo: now, toGranularity: .year)
+            isInDisplayedMonth(subscription: subscription, calendar: calendar)
         }
     }
 
     private var selectedDateSubscriptions: [Subscription] {
         let calendar = Calendar.current
         return viewModel.subscriptions
-            .filter { calendar.isDate($0.nextBillingDate, inSameDayAs: selectedCalendarDate) }
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            .filter { subscription in
+                if calendar.isDate(subscription.nextBillingDate, inSameDayAs: selectedCalendarDate) {
+                    return true
+                }
+                if paymentHistoryDates(for: subscription).contains(where: {
+                    calendar.isDate($0, inSameDayAs: selectedCalendarDate)
+                }) {
+                    return true
+                }
+                return false
+            }
+            .sorted { lhs, rhs in
+                if lhs.isPinned != rhs.isPinned {
+                    return lhs.isPinned && !rhs.isPinned
+                }
+                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+            }
     }
 
     private var boardSubscriptions: [Subscription] {
         let trimmedQuery = boardSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         let loweredQuery = trimmedQuery.lowercased()
 
-        let filtered = viewModel.filteredSubscriptions.filter { subscription in
+        let monthFiltered = viewModel.subscriptions.filter { subscription in
+            isInDisplayedMonth(subscription: subscription, calendar: Calendar.current)
+        }
+        let baseByFilter: [Subscription]
+        switch viewModel.selectedFilter {
+        case .all:
+            baseByFilter = monthFiltered
+        case .thisWeek:
+            let today = Calendar.current.startOfDay(for: .now)
+            let weekEnd = Calendar.current.date(byAdding: .day, value: 7, to: today) ?? today
+            baseByFilter = monthFiltered.filter { subscription in
+                let date = Calendar.current.startOfDay(for: subscription.nextBillingDate)
+                return date >= today && date <= weekEnd
+            }
+        case .thisMonth:
+            baseByFilter = monthFiltered
+        }
+
+        let filtered = baseByFilter.filter { subscription in
             guard !loweredQuery.isEmpty else { return true }
             if subscription.name.lowercased().contains(loweredQuery) { return true }
             if let customCategoryName = subscription.customCategoryName?.lowercased(),
@@ -798,6 +831,9 @@ public struct BoardView: View {
         }
 
         return filtered.sorted { lhs, rhs in
+            if lhs.isPinned != rhs.isPinned {
+                return lhs.isPinned && !rhs.isPinned
+            }
             switch selectedSort {
             case .nextBillingAsc:
                 return lhs.nextBillingDate < rhs.nextBillingDate
@@ -882,6 +918,28 @@ public struct BoardView: View {
         displayMode == .board && selectedSort == .custom && isCustomSortEditing && !isSelectionMode
     }
 
+    private var isSelectionDnDEnabled: Bool {
+        displayMode == .board && isSelectionMode && !selectedSubscriptionIDs.isEmpty
+    }
+
+    private var isAnyDnDEnabled: Bool {
+        isCustomDnDEnabled || isSelectionDnDEnabled
+    }
+
+    private var headerLeadingButtonSymbolName: String {
+        if isSelectionMode {
+            return "xmark.circle"
+        }
+        return isCustomSortEditing ? "checkmark.circle" : "pencil.circle"
+    }
+
+    private var headerLeadingButtonAccessibilityKey: String {
+        if isSelectionMode {
+            return "common.cancel"
+        }
+        return isCustomSortEditing ? "board.sort.custom.done" : "board.sort.custom.edit"
+    }
+
     private func toggleSelection(for id: UUID) {
         if selectedSubscriptionIDs.contains(id) {
             selectedSubscriptionIDs.remove(id)
@@ -919,6 +977,30 @@ public struct BoardView: View {
         customSortOrderStorage = customSortOrderIDs.map(\.uuidString).joined(separator: ",")
     }
 
+    private func prepareCustomSortForDragIfNeeded() {
+        guard selectedSort != .custom else { return }
+        customSortOrderIDs = boardSubscriptions.map(\.id) + customSortOrderIDs.filter { id in
+            !boardSubscriptions.contains(where: { $0.id == id })
+        }
+        persistCustomSortOrder()
+        selectedSort = .custom
+    }
+
+    private func enterCustomSortEditing() {
+        if selectedSort != .custom {
+            customSortOrderIDs = boardSubscriptions.map(\.id) + customSortOrderIDs.filter { id in
+                !boardSubscriptions.contains(where: { $0.id == id })
+            }
+            persistCustomSortOrder()
+            selectedSort = .custom
+        }
+        selectedSubscriptionIDs.removeAll()
+        isSelectionMode = false
+        withAnimation(.easeInOut(duration: 0.2)) {
+            isCustomSortEditing = true
+        }
+    }
+
     private var sortMenuButton: some View {
         Menu {
             ForEach(BoardSortOption.allCases) { option in
@@ -947,8 +1029,17 @@ public struct BoardView: View {
             Button("common.edit") {
                 editorSheet = .edit(subscription)
             }
+            Button(subscription.isPinned ? "board.action.unpin" : "board.action.pin") {
+                Task { await viewModel.setPinned(subscription, isPinned: !subscription.isPinned) }
+            }
             Button("board.action.completePayment") {
                 Task { await viewModel.markPaymentComplete(subscription) }
+            }
+            Button("board.action.cancelPayment") {
+                Task { await viewModel.cancelPaymentComplete(subscription) }
+            }
+            Button("board.action.archive") {
+                Task { await viewModel.archive(subscription) }
             }
             Button("common.delete", role: .destructive) {
                 pendingDeleteSubscription = subscription
@@ -966,6 +1057,95 @@ public struct BoardView: View {
 
     private var displayedMonthStart: Date {
         monthStart(for: displayedMonth)
+    }
+
+    @ViewBuilder
+    private func subscriptionCard(for subscription: Subscription) -> some View {
+        let base = SubscriptionCardView(
+            subscription: subscription,
+            presetIcon: presetIcon(for: subscription.iconKey),
+            showIcon: !isSmallBoardLayout,
+            showDateBelowLabel: isSmallBoardLayout,
+            referenceMonth: displayedMonthStart,
+            billingDateOverride: projectedBillingDateInDisplayedMonth(subscription: subscription, calendar: Calendar.current),
+            onTapIcon: isSelectionMode || isCustomDnDEnabled ? nil : {
+                suppressCardTapSubscriptionID = subscription.id
+                quickIconQuery = ""
+                quickIconTarget = subscription
+                DispatchQueue.main.async {
+                    suppressCardTapSubscriptionID = nil
+                }
+            }
+        )
+        .overlay(alignment: .topTrailing) {
+            if isSelectionMode {
+                Image(systemName: selectedSubscriptionIDs.contains(subscription.id) ? "checkmark.circle.fill" : "circle")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(selectedSubscriptionIDs.contains(subscription.id) ? Color.payAccent : Color.payMuted.opacity(0.8))
+                    .padding(PayBoardSpacing.xs)
+            } else if !isSmallBoardLayout && !isCustomDnDEnabled {
+                cardActionMenu(for: subscription, isCompact: isNormalBoardLayout)
+                    .padding(PayBoardSpacing.xs)
+            }
+        }
+        .contentShape(RoundedRectangle(cornerRadius: PayBoardRadius.card))
+        .onTapGesture {
+            if suppressCardTapSubscriptionID == subscription.id { return }
+            if isCustomDnDEnabled { return }
+            if isSelectionMode {
+                toggleSelection(for: subscription.id)
+            } else {
+                editorSheet = .edit(subscription)
+            }
+        }
+        .onLongPressGesture(minimumDuration: 0.35) {
+            if isAnyDnDEnabled { return }
+            if !isSelectionMode {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isSelectionMode = true
+                    isPresentingMonthSelector = false
+                }
+            }
+            toggleSelection(for: subscription.id)
+        }
+
+        if isAnyDnDEnabled {
+            base
+                .onDrag {
+                    prepareCustomSortForDragIfNeeded()
+                    draggedCustomSortID = subscription.id
+                    HapticFeedback.dragStarted()
+                    return NSItemProvider(object: subscription.id.uuidString as NSString)
+                } preview: {
+                    dragPreview(for: subscription)
+                }
+                .onDrop(of: [UTType.text], delegate: SubscriptionReorderDropDelegate(
+                    targetID: subscription.id,
+                    orderedIDs: $customSortOrderIDs,
+                    draggedID: $draggedCustomSortID,
+                    lastTargetID: $lastDropTargetID,
+                    selectedIDs: $selectedSubscriptionIDs,
+                    isSelectionMode: isSelectionMode,
+                    isEnabled: true,
+                    onPersist: persistCustomSortOrder
+                ))
+        } else {
+            base
+        }
+    }
+
+    private func dragPreview(for subscription: Subscription) -> some View {
+        SubscriptionCardView(
+            subscription: subscription,
+            presetIcon: presetIcon(for: subscription.iconKey),
+            showIcon: !isSmallBoardLayout,
+            showDateBelowLabel: isSmallBoardLayout,
+            referenceMonth: displayedMonthStart,
+            onTapIcon: nil
+        )
+        .frame(width: isSmallBoardLayout ? 120 : 160)
+        .scaleEffect(0.97)
+        .shadow(color: .black.opacity(0.2), radius: 10, y: 4)
     }
 
     private var weekdayLabelKeys: [String] {
@@ -1048,9 +1228,9 @@ public struct BoardView: View {
                 }
             }
 
-            if let lastPaymentDate = subscription.lastPaymentDate,
-               calendar.isDate(lastPaymentDate, equalTo: displayedMonthStart, toGranularity: .month) {
-                let key = dateKey(for: lastPaymentDate)
+            for paymentDate in paymentHistoryDates(for: subscription) {
+                guard calendar.isDate(paymentDate, equalTo: displayedMonthStart, toGranularity: .month) else { continue }
+                let key = dateKey(for: paymentDate)
                 if let existing = result[key] {
                     result[key] = existing.priority >= CalendarMarker.paid.priority ? existing : .paid
                 } else {
@@ -1085,6 +1265,105 @@ public struct BoardView: View {
             return NSLocalizedString("common.variable", comment: "")
         }
         return formattedCurrency(subscription.amount, currencyCode: subscription.currencyCode)
+    }
+
+    private func paymentHistoryDates(for subscription: Subscription) -> [Date] {
+        if !subscription.paymentHistoryDates.isEmpty {
+            return subscription.paymentHistoryDates
+        }
+        if let last = subscription.lastPaymentDate {
+            return [last]
+        }
+        return []
+    }
+
+    @ViewBuilder
+    private func paymentStatusIndicator(for subscription: Subscription) -> some View {
+        let state = calendarPaymentState(for: subscription, on: selectedCalendarDate)
+        switch state {
+        case .paid:
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(Color.green)
+                    .frame(width: 7, height: 7)
+                Text("subscription.paymentDone")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(Color.green)
+            }
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(Color.green.opacity(0.14))
+            .clipShape(Capsule())
+        case .pending:
+            Circle()
+                .fill(Color.blue)
+                .frame(width: 8, height: 8)
+        }
+    }
+
+    private func calendarPaymentState(for subscription: Subscription, on date: Date) -> CalendarPaymentState {
+        let calendar = Calendar.current
+        if paymentHistoryDates(for: subscription).contains(where: { calendar.isDate($0, inSameDayAs: date) }) {
+            return .paid
+        }
+        return .pending
+    }
+
+    private func isInDisplayedMonth(subscription: Subscription, calendar: Calendar) -> Bool {
+        if calendar.isDate(subscription.nextBillingDate, equalTo: displayedMonthStart, toGranularity: .month) {
+            return true
+        }
+        if paymentHistoryDates(for: subscription).contains(where: {
+            calendar.isDate($0, equalTo: displayedMonthStart, toGranularity: .month)
+        }) {
+            return true
+        }
+        return projectedBillingDateInDisplayedMonth(subscription: subscription, calendar: calendar) != nil
+    }
+
+    private func projectedBillingDateInDisplayedMonth(subscription: Subscription, calendar: Calendar) -> Date? {
+        guard let monthInterval = calendar.dateInterval(of: .month, for: displayedMonthStart) else {
+            return nil
+        }
+        let monthStart = calendar.startOfDay(for: monthInterval.start)
+        let monthEnd = calendar.startOfDay(for: monthInterval.end)
+        let anchor = calendar.startOfDay(for: subscription.nextBillingDate)
+
+        if anchor >= monthStart && anchor < monthEnd {
+            return anchor
+        }
+
+        switch subscription.billingCycle {
+        case .monthly:
+            var components = calendar.dateComponents([.year, .month], from: monthStart)
+            let anchorDay = calendar.component(.day, from: anchor)
+            let dayCount = calendar.range(of: .day, in: .month, for: monthStart)?.count ?? 31
+            components.day = min(anchorDay, dayCount)
+            guard let projected = calendar.date(from: components) else { return nil }
+            return projected >= monthStart && projected < monthEnd ? projected : nil
+
+        case .yearly:
+            let displayedMonth = calendar.component(.month, from: monthStart)
+            let anchorMonth = calendar.component(.month, from: anchor)
+            guard displayedMonth == anchorMonth else { return nil }
+            var components = calendar.dateComponents([.year, .month], from: monthStart)
+            let anchorDay = calendar.component(.day, from: anchor)
+            let dayCount = calendar.range(of: .day, in: .month, for: monthStart)?.count ?? 31
+            components.day = min(anchorDay, dayCount)
+            guard let projected = calendar.date(from: components) else { return nil }
+            return projected >= monthStart && projected < monthEnd ? projected : nil
+
+        case let .customDays(days):
+            let interval = max(1, days)
+            let delta = calendar.dateComponents([.day], from: anchor, to: monthStart).day ?? 0
+            var multiplier = Int(floor(Double(delta) / Double(interval)))
+            var candidate = calendar.date(byAdding: .day, value: multiplier * interval, to: anchor) ?? anchor
+            while candidate < monthStart {
+                multiplier += 1
+                candidate = calendar.date(byAdding: .day, value: multiplier * interval, to: anchor) ?? anchor
+            }
+            return candidate >= monthStart && candidate < monthEnd ? candidate : nil
+        }
     }
 
     private func monthTitle(for date: Date) -> String {
@@ -1318,36 +1597,86 @@ public struct BoardView: View {
         let targetID: UUID
         @Binding var orderedIDs: [UUID]
         @Binding var draggedID: UUID?
+        @Binding var lastTargetID: UUID?
+        @Binding var selectedIDs: Set<UUID>
+        let isSelectionMode: Bool
         let isEnabled: Bool
         let onPersist: () -> Void
 
         func dropEntered(info: DropInfo) {
             guard isEnabled,
                   let draggedID,
-                  draggedID != targetID,
-                  let sourceIndex = orderedIDs.firstIndex(of: draggedID),
-                  let targetIndex = orderedIDs.firstIndex(of: targetID) else {
+                  draggedID != targetID else {
+                return
+            }
+            guard lastTargetID != targetID else { return }
+            lastTargetID = targetID
+
+            if isSelectionMode, selectedIDs.contains(draggedID), selectedIDs.count > 1 {
+                guard !selectedIDs.contains(targetID) else { return }
+                let movingBlock = orderedIDs.filter { selectedIDs.contains($0) }
+                var remaining = orderedIDs.filter { !selectedIDs.contains($0) }
+                guard let targetIndex = remaining.firstIndex(of: targetID) else { return }
+                remaining.insert(contentsOf: movingBlock, at: targetIndex)
+                withAnimation(.easeInOut(duration: 0.16)) {
+                    orderedIDs = remaining
+                }
+                HapticFeedback.reorderStepped()
                 return
             }
 
-            withAnimation(.easeInOut(duration: 0.15)) {
+            guard let sourceIndex = orderedIDs.firstIndex(of: draggedID),
+                  let targetIndex = orderedIDs.firstIndex(of: targetID),
+                  sourceIndex != targetIndex else {
+                return
+            }
+            withAnimation(.easeInOut(duration: 0.16)) {
                 orderedIDs.move(
                     fromOffsets: IndexSet(integer: sourceIndex),
                     toOffset: sourceIndex < targetIndex ? targetIndex + 1 : targetIndex
                 )
             }
-            onPersist()
+            HapticFeedback.reorderStepped()
         }
 
         func dropUpdated(info: DropInfo) -> DropProposal? {
-            isEnabled ? DropProposal(operation: .move) : DropProposal(operation: .copy)
+            isEnabled ? DropProposal(operation: .move) : nil
+        }
+
+        func dropExited(info: DropInfo) {
+            lastTargetID = nil
         }
 
         func performDrop(info: DropInfo) -> Bool {
             guard isEnabled else { return false }
             draggedID = nil
+            lastTargetID = nil
             onPersist()
+            HapticFeedback.dropCommitted()
             return true
+        }
+    }
+
+    private enum HapticFeedback {
+        static func dragStarted() {
+            #if os(iOS)
+            let generator = UIImpactFeedbackGenerator(style: .light)
+            generator.impactOccurred()
+            #endif
+        }
+
+        static func reorderStepped() {
+            #if os(iOS)
+            let generator = UISelectionFeedbackGenerator()
+            generator.selectionChanged()
+            #endif
+        }
+
+        static func dropCommitted() {
+            #if os(iOS)
+            let generator = UIImpactFeedbackGenerator(style: .rigid)
+            generator.impactOccurred()
+            #endif
         }
     }
 
@@ -1423,6 +1752,11 @@ public struct BoardView: View {
                 return 2
             }
         }
+    }
+
+    private enum CalendarPaymentState {
+        case paid
+        case pending
     }
 }
 

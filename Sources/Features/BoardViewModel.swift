@@ -6,6 +6,7 @@ import Data
 @MainActor
 public final class BoardViewModel: ObservableObject {
     @Published public private(set) var subscriptions: [Subscription] = []
+    @Published public private(set) var archivedSubscriptions: [Subscription] = []
     @Published public var selectedFilter: BoardFilter = .all
     @Published public var errorMessage: String?
 
@@ -65,11 +66,13 @@ public final class BoardViewModel: ObservableObject {
 
     public func onAppear() async {
         await reload()
+        await processAutoPaymentsIfNeeded()
     }
 
     public func reload() async {
         do {
             subscriptions = try await repository.fetchAll()
+            archivedSubscriptions = try await repository.fetchArchived()
             WidgetSnapshotStore.save(subscriptions: subscriptions)
         } catch {
             errorMessage = error.localizedDescription
@@ -140,6 +143,18 @@ public final class BoardViewModel: ObservableObject {
         await saveAndReschedule(updatedSubscriptions: updates)
     }
 
+    public func cancelPaymentComplete(_ subscription: Subscription) async {
+        let canceled = canceledSubscription(from: subscription)
+        await saveAndReschedule(updatedSubscriptions: [canceled])
+    }
+
+    public func cancelPaymentComplete(ids: Set<UUID>) async {
+        let updates = subscriptions
+            .filter { ids.contains($0.id) }
+            .map { canceledSubscription(from: $0) }
+        await saveAndReschedule(updatedSubscriptions: updates)
+    }
+
     public func delete(ids: Set<UUID>) async {
         guard !ids.isEmpty else { return }
         do {
@@ -153,12 +168,119 @@ public final class BoardViewModel: ObservableObject {
         }
     }
 
-    private func completedSubscription(from subscription: Subscription) -> Subscription {
+    public func setPinned(_ subscription: Subscription, isPinned: Bool) async {
         var copy = subscription
-        copy.lastPaymentDate = .now
+        copy.isPinned = isPinned
+        copy.updatedAt = .now
+        await updateOnly(updatedSubscriptions: [copy])
+    }
+
+    public func setPinned(ids: Set<UUID>, isPinned: Bool) async {
+        guard !ids.isEmpty else { return }
+        let updates = subscriptions
+            .filter { ids.contains($0.id) }
+            .map { subscription in
+                var copy = subscription
+                copy.isPinned = isPinned
+                copy.updatedAt = .now
+                return copy
+            }
+        await updateOnly(updatedSubscriptions: updates)
+    }
+
+    public func archive(_ subscription: Subscription) async {
+        do {
+            try await repository.archive(id: subscription.id)
+            await notificationScheduler.cancel(for: subscription.id)
+            await reload()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    public func archive(ids: Set<UUID>) async {
+        guard !ids.isEmpty else { return }
+        do {
+            for id in ids {
+                try await repository.archive(id: id)
+                await notificationScheduler.cancel(for: id)
+            }
+            await reload()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    public func restore(_ subscription: Subscription) async {
+        do {
+            try await repository.restore(id: subscription.id)
+            let reloaded = try await repository.fetchAll()
+            subscriptions = reloaded
+            archivedSubscriptions = try await repository.fetchArchived()
+            WidgetSnapshotStore.save(subscriptions: reloaded)
+            if let restored = reloaded.first(where: { $0.id == subscription.id }),
+               restored.notificationsEnabled {
+                for option in reminderOptions {
+                    try await notificationScheduler.schedule(
+                        for: restored,
+                        daysBefore: option.rawValue,
+                        hour: reminderHour,
+                        minute: reminderMinute
+                    )
+                }
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    public func processAutoPaymentsIfNeeded(referenceDate: Date = .now) async {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: referenceDate)
+        let dueItems = subscriptions.filter { subscription in
+            subscription.isAutoPayEnabled &&
+                subscription.isActive &&
+                calendar.startOfDay(for: subscription.nextBillingDate) <= today
+        }
+        guard !dueItems.isEmpty else { return }
+        let updates = dueItems.map { completedSubscription(from: $0, at: referenceDate) }
+        await saveAndReschedule(updatedSubscriptions: updates)
+    }
+
+    private func completedSubscription(from subscription: Subscription) -> Subscription {
+        completedSubscription(from: subscription, at: .now)
+    }
+
+    private func completedSubscription(from subscription: Subscription, at date: Date) -> Subscription {
+        var copy = subscription
+        copy.lastPaymentDate = date
+        copy.paymentHistoryDates = appendPaymentHistory(date: date, to: subscription.paymentHistoryDates)
         copy.nextBillingDate = nextBillingDate(after: subscription.nextBillingDate, cycle: subscription.billingCycle)
+        copy.updatedAt = date
+        return copy
+    }
+
+    private func canceledSubscription(from subscription: Subscription) -> Subscription {
+        var copy = subscription
+        guard subscription.lastPaymentDate != nil || !subscription.paymentHistoryDates.isEmpty else { return copy }
+        copy.paymentHistoryDates = removeLatestPaymentHistory(from: subscription.paymentHistoryDates)
+        copy.lastPaymentDate = copy.paymentHistoryDates.max()
+        copy.nextBillingDate = previousBillingDate(before: subscription.nextBillingDate, cycle: subscription.billingCycle)
         copy.updatedAt = .now
         return copy
+    }
+
+    private func appendPaymentHistory(date: Date, to history: [Date]) -> [Date] {
+        var updated = history
+        updated.append(date)
+        return updated.sorted(by: <)
+    }
+
+    private func removeLatestPaymentHistory(from history: [Date]) -> [Date] {
+        guard !history.isEmpty else { return history }
+        var updated = history.sorted(by: <)
+        updated.removeLast()
+        return updated
     }
 
     private func nextBillingDate(after date: Date, cycle: BillingCycle) -> Date {
@@ -170,6 +292,18 @@ public final class BoardViewModel: ObservableObject {
             return calendar.date(byAdding: .year, value: 1, to: date) ?? date
         case let .customDays(days):
             return calendar.date(byAdding: .day, value: max(1, days), to: date) ?? date
+        }
+    }
+
+    private func previousBillingDate(before date: Date, cycle: BillingCycle) -> Date {
+        let calendar = Calendar.current
+        switch cycle {
+        case .monthly:
+            return calendar.date(byAdding: .month, value: -1, to: date) ?? date
+        case .yearly:
+            return calendar.date(byAdding: .year, value: -1, to: date) ?? date
+        case let .customDays(days):
+            return calendar.date(byAdding: .day, value: -max(1, days), to: date) ?? date
         }
     }
 
@@ -188,6 +322,18 @@ public final class BoardViewModel: ObservableObject {
                         minute: reminderMinute
                     )
                 }
+            }
+            await reload()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func updateOnly(updatedSubscriptions: [Subscription]) async {
+        guard !updatedSubscriptions.isEmpty else { return }
+        do {
+            for subscription in updatedSubscriptions {
+                try await repository.update(subscription)
             }
             await reload()
         } catch {
