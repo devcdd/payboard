@@ -49,7 +49,12 @@ public actor UserNotificationScheduler: NotificationScheduler {
 
         let content = UNMutableNotificationContent()
         content.title = Self.localized("notification.title")
-        let bodyFormat = Self.localized("notification.body")
+        let bodyFormat: String
+        if subscription.isAutoPayEnabled {
+            bodyFormat = Self.localized(Self.autoPayBodyKey(daysBefore: daysBefore))
+        } else {
+            bodyFormat = Self.localized("notification.body")
+        }
         content.body = String(format: bodyFormat, subscription.name)
         content.sound = .default
 
@@ -113,6 +118,19 @@ public actor UserNotificationScheduler: NotificationScheduler {
 
     private static func notificationID(subscriptionID: UUID, daysBefore: Int) -> String {
         "subscription.\(subscriptionID.uuidString).\(daysBefore)"
+    }
+
+    private static func autoPayBodyKey(daysBefore: Int) -> String {
+        switch daysBefore {
+        case 0:
+            return "notification.autopay.body.today"
+        case 1:
+            return "notification.autopay.body.tomorrow"
+        case 2:
+            return "notification.autopay.body.dayAfterTomorrow"
+        default:
+            return "notification.autopay.body.default"
+        }
     }
 
     private static func setTime(_ date: Date, hour: Int, minute: Int) -> Date {
