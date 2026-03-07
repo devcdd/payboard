@@ -41,10 +41,13 @@ public struct Subscription: Identifiable, Codable, Equatable, Sendable {
     public var billingCycle: BillingCycle
     public var nextBillingDate: Date
     public var lastPaymentDate: Date?
+    public var paymentHistoryDates: [Date]
     public var iconKey: String
     public var iconColorKey: String
     public var customCategoryName: String?
     public var notificationsEnabled: Bool
+    public var isAutoPayEnabled: Bool
+    public var isPinned: Bool
     public var isActive: Bool
     public var memo: String?
     public let createdAt: Date
@@ -60,10 +63,13 @@ public struct Subscription: Identifiable, Codable, Equatable, Sendable {
         billingCycle: BillingCycle,
         nextBillingDate: Date,
         lastPaymentDate: Date? = nil,
+        paymentHistoryDates: [Date] = [],
         iconKey: String,
         iconColorKey: String = "blue",
         customCategoryName: String? = nil,
         notificationsEnabled: Bool = true,
+        isAutoPayEnabled: Bool = false,
+        isPinned: Bool = false,
         isActive: Bool = true,
         memo: String? = nil,
         createdAt: Date = .now,
@@ -78,10 +84,13 @@ public struct Subscription: Identifiable, Codable, Equatable, Sendable {
         self.billingCycle = billingCycle
         self.nextBillingDate = nextBillingDate
         self.lastPaymentDate = lastPaymentDate
+        self.paymentHistoryDates = paymentHistoryDates
         self.iconKey = iconKey
         self.iconColorKey = iconColorKey
         self.customCategoryName = customCategoryName
         self.notificationsEnabled = notificationsEnabled
+        self.isAutoPayEnabled = isAutoPayEnabled
+        self.isPinned = isPinned
         self.isActive = isActive
         self.memo = memo
         self.createdAt = createdAt
@@ -100,10 +109,13 @@ public extension Subscription {
         case billingCycle
         case nextBillingDate
         case lastPaymentDate
+        case paymentHistoryDates
         case iconKey
         case iconColorKey
         case customCategoryName
         case notificationsEnabled
+        case isAutoPayEnabled
+        case isPinned
         case isActive
         case memo
         case createdAt
@@ -122,10 +134,13 @@ public extension Subscription {
             billingCycle: try container.decode(BillingCycle.self, forKey: .billingCycle),
             nextBillingDate: try container.decode(Date.self, forKey: .nextBillingDate),
             lastPaymentDate: try container.decodeIfPresent(Date.self, forKey: .lastPaymentDate),
+            paymentHistoryDates: try container.decodeIfPresent([Date].self, forKey: .paymentHistoryDates) ?? [],
             iconKey: try container.decode(String.self, forKey: .iconKey),
             iconColorKey: try container.decodeIfPresent(String.self, forKey: .iconColorKey) ?? "blue",
             customCategoryName: try container.decodeIfPresent(String.self, forKey: .customCategoryName),
             notificationsEnabled: try container.decodeIfPresent(Bool.self, forKey: .notificationsEnabled) ?? true,
+            isAutoPayEnabled: try container.decodeIfPresent(Bool.self, forKey: .isAutoPayEnabled) ?? false,
+            isPinned: try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false,
             isActive: try container.decode(Bool.self, forKey: .isActive),
             memo: try container.decodeIfPresent(String.self, forKey: .memo),
             createdAt: try container.decode(Date.self, forKey: .createdAt),

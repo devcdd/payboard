@@ -10,9 +10,12 @@ public enum NotificationAuthorizationStatus: Sendable {
 
 public protocol SubscriptionRepository: Sendable {
     func fetchAll() async throws -> [Subscription]
+    func fetchArchived() async throws -> [Subscription]
     func create(_ subscription: Subscription) async throws
     func update(_ subscription: Subscription) async throws
     func delete(id: UUID) async throws
+    func archive(id: UUID) async throws
+    func restore(id: UUID) async throws
     func upcoming(within days: Int, from now: Date) async throws -> [Subscription]
 }
 

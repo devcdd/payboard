@@ -9,7 +9,15 @@ public actor InMemorySubscriptionRepository: SubscriptionRepository {
     }
 
     public func fetchAll() async throws -> [Subscription] {
-        storage.sorted(by: { $0.nextBillingDate < $1.nextBillingDate })
+        storage
+            .filter(\.isActive)
+            .sorted(by: { $0.nextBillingDate < $1.nextBillingDate })
+    }
+
+    public func fetchArchived() async throws -> [Subscription] {
+        storage
+            .filter { !$0.isActive }
+            .sorted(by: { $0.updatedAt > $1.updatedAt })
     }
 
     public func create(_ subscription: Subscription) async throws {
@@ -29,6 +37,22 @@ public actor InMemorySubscriptionRepository: SubscriptionRepository {
             throw DomainError.notFound
         }
         storage.removeAll(where: { $0.id == id })
+    }
+
+    public func archive(id: UUID) async throws {
+        guard let index = storage.firstIndex(where: { $0.id == id }) else {
+            throw DomainError.notFound
+        }
+        storage[index].isActive = false
+        storage[index].updatedAt = .now
+    }
+
+    public func restore(id: UUID) async throws {
+        guard let index = storage.firstIndex(where: { $0.id == id }) else {
+            throw DomainError.notFound
+        }
+        storage[index].isActive = true
+        storage[index].updatedAt = .now
     }
 
     public func upcoming(within days: Int, from now: Date) async throws -> [Subscription] {

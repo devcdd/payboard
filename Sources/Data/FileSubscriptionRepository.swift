@@ -14,6 +14,12 @@ public actor FileSubscriptionRepository: SubscriptionRepository {
             .sorted(by: { $0.nextBillingDate < $1.nextBillingDate })
     }
 
+    public func fetchArchived() async throws -> [Subscription] {
+        try await store.load()
+            .filter { !$0.isActive }
+            .sorted(by: { $0.updatedAt > $1.updatedAt })
+    }
+
     public func create(_ subscription: Subscription) async throws {
         try subscription.validate()
         var current = try await store.load()
@@ -37,6 +43,26 @@ public actor FileSubscriptionRepository: SubscriptionRepository {
             throw DomainError.notFound
         }
         current.removeAll(where: { $0.id == id })
+        try await store.save(current)
+    }
+
+    public func archive(id: UUID) async throws {
+        var current = try await store.load()
+        guard let index = current.firstIndex(where: { $0.id == id }) else {
+            throw DomainError.notFound
+        }
+        current[index].isActive = false
+        current[index].updatedAt = .now
+        try await store.save(current)
+    }
+
+    public func restore(id: UUID) async throws {
+        var current = try await store.load()
+        guard let index = current.firstIndex(where: { $0.id == id }) else {
+            throw DomainError.notFound
+        }
+        current[index].isActive = true
+        current[index].updatedAt = .now
         try await store.save(current)
     }
 
