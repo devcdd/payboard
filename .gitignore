@@ -22,7 +22,7 @@ xcuserdata/
 Configs/Secrets.xcconfig
 Secrets.xcconfig
 Secrets 2.xcconfig
-PayBoardiOS/PayBoardiOS-Info.plist
+PayboardConfig.xcconfig
 cert/
 *.p8
 *.cer

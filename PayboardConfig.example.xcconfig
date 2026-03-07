@@ -1,0 +1,11 @@
+//
+//  PayboardConfig.example.xcconfig
+//  PayBoardiOS
+//
+//  Commit-safe template for local overrides.
+//
+
+SLASH = /
+SUPABASE_URL = https:$(SLASH)$(SLASH)your-project.supabase.co
+SUPABASE_ANON_KEY = sb_publishable_replace_me
+PAYBOARD_SERVER_URL = https:$(SLASH)$(SLASH)your-server.example.com
