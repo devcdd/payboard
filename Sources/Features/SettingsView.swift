@@ -12,8 +12,10 @@ public struct SettingsView: View {
     @ObservedObject var viewModel: SettingsViewModel
     @Environment(\.locale) private var locale
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.openURL) private var openURL
     @State private var appleSignInCoordinator: AppleSignInCoordinator?
     @State private var isShowingRestoreConfirm = false
+    @State private var isShowingDeleteAccountConfirm = false
 
     public init(viewModel: SettingsViewModel) {
         self.viewModel = viewModel
@@ -21,7 +23,7 @@ public struct SettingsView: View {
 
     public var body: some View {
         NavigationStack {
-            Form {
+            List {
                 Section("settings.section.permission") {
                     Toggle(
                         "settings.push.usage",
@@ -83,17 +85,22 @@ public struct SettingsView: View {
                         Button("settings.backup.upload.button") {
                             Task { await viewModel.uploadBackup() }
                         }
-                        .disabled(viewModel.isBackupSyncInProgress)
+                        .disabled(viewModel.isBackupSyncInProgress || viewModel.isAccountDeletionInProgress)
 
                         Button("settings.backup.restore.button") {
                             isShowingRestoreConfirm = true
                         }
-                        .disabled(viewModel.isBackupSyncInProgress)
+                        .disabled(viewModel.isBackupSyncInProgress || viewModel.isAccountDeletionInProgress)
 
                         Button("settings.backup.signOut") {
                             Task { await viewModel.signOutBackup() }
                         }
-                        .disabled(viewModel.isBackupSyncInProgress)
+                        .disabled(viewModel.isBackupSyncInProgress || viewModel.isAccountDeletionInProgress)
+
+                        Button("settings.backup.deleteAccount", role: .destructive) {
+                            isShowingDeleteAccountConfirm = true
+                        }
+                        .disabled(viewModel.isBackupSyncInProgress || viewModel.isAccountDeletionInProgress)
                     } else {
                         appleSignInImageButton
                     }
@@ -101,10 +108,13 @@ public struct SettingsView: View {
                     if let messageKey = viewModel.backupMessageKey {
                         Text(LocalizedStringKey(messageKey))
                             .font(.caption)
-                            .foregroundStyle(messageKey.hasSuffix("failed") ? Color.payDanger : Color.payMuted)
+                            .foregroundStyle(isBackupErrorMessage(messageKey) ? Color.payDanger : Color.payMuted)
                     }
 
-                    if viewModel.isBackupSyncInProgress {
+                    if viewModel.isAccountDeletionInProgress {
+                        ProgressView("settings.backup.deleteAccount.inProgress")
+                            .font(.caption)
+                    } else if viewModel.isBackupSyncInProgress {
                         ProgressView("settings.backup.sync.inProgress")
                             .font(.caption)
                     }
@@ -168,7 +178,63 @@ public struct SettingsView: View {
                     }
                     .pickerStyle(.segmented)
                 }
+
+                Section("settings.section.board") {
+                    Picker("settings.initialScreen.picker", selection: $viewModel.initialScreen) {
+                        ForEach(InitialScreen.allCases) { screen in
+                            Text(LocalizedStringKey(screen.labelKey)).tag(screen)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    Text("settings.initialScreen.caption")
+                        .font(.caption)
+                        .foregroundStyle(Color.payMuted)
+
+                    Divider()
+
+                    Toggle("settings.board.searchVisible", isOn: $viewModel.isBoardSearchVisible)
+                    Text("settings.board.searchVisible.caption")
+                        .font(.caption)
+                        .foregroundStyle(Color.payMuted)
+                }
+
+                Section("settings.section.contact") {
+                    if let emailURL = URL(string: "mailto:developer.cdd@gmail.com") {
+                        Button {
+                            openURL(emailURL)
+                        } label: {
+                            Label {
+                                Text("settings.contact.email")
+                                    .foregroundStyle(Color.payAccent)
+                            } icon: {
+                                Image(systemName: "envelope")
+                                    .foregroundStyle(Color.payMuted)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    if let instagramURL = URL(string: "https://www.instagram.com/payboard.app/") {
+                        Button {
+                            openURL(instagramURL)
+                        } label: {
+                            Label {
+                                Text("settings.contact.instagram")
+                                    .foregroundStyle(Color.payAccent)
+                            } icon: {
+                                Image(systemName: "camera")
+                                    .foregroundStyle(Color.payMuted)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    Text("settings.contact.caption")
+                        .font(.caption)
+                        .foregroundStyle(Color.payMuted)
+                }
             }
+            .listStyle(.plain)
             .navigationTitle("settings.title")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -180,6 +246,14 @@ public struct SettingsView: View {
                 }
             } message: {
                 Text("settings.backup.restore.confirm.message")
+            }
+            .alert("settings.backup.deleteAccount.confirm.title", isPresented: $isShowingDeleteAccountConfirm) {
+                Button("common.cancel", role: .cancel) {}
+                Button("settings.backup.deleteAccount.confirm.confirm", role: .destructive) {
+                    Task { await viewModel.deleteAccount() }
+                }
+            } message: {
+                Text(viewModel.deleteAccountConfirmationMessage)
             }
             .alert("settings.backup.signIn.restorePrompt.title", isPresented: $viewModel.isShowingRestorePromptAfterSignIn) {
                 Button("settings.backup.signIn.restorePrompt.skip", role: .cancel) {
@@ -242,6 +316,10 @@ public struct SettingsView: View {
         controller.delegate = coordinator
         controller.presentationContextProvider = coordinator
         controller.performRequests()
+    }
+
+    private func isBackupErrorMessage(_ messageKey: String) -> Bool {
+        messageKey.hasSuffix("failed") || messageKey.hasSuffix("notConfigured")
     }
 }
 
