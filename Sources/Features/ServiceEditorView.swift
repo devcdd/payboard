@@ -20,6 +20,8 @@ public struct ServiceEditorView: View {
     @State private var billingCycle: BillingCycle
     @State private var customCategoryName: String
     @State private var notificationsEnabled: Bool
+    @State private var isAutoPayEnabled: Bool
+    @State private var isPinned: Bool
     @State private var selectedIconKey: String
     @State private var selectedIconColorKey: String
     @State private var memo: String
@@ -47,6 +49,8 @@ public struct ServiceEditorView: View {
         _billingCycle = State(initialValue: original?.billingCycle ?? .monthly)
         _customCategoryName = State(initialValue: original?.customCategoryName ?? "")
         _notificationsEnabled = State(initialValue: original?.notificationsEnabled ?? true)
+        _isAutoPayEnabled = State(initialValue: original?.isAutoPayEnabled ?? false)
+        _isPinned = State(initialValue: original?.isPinned ?? false)
         _selectedIconKey = State(initialValue: original?.iconKey ?? "preset_1")
         _selectedIconColorKey = State(initialValue: original?.iconColorKey ?? "blue")
         _memo = State(initialValue: original?.memo ?? "")
@@ -61,7 +65,7 @@ public struct ServiceEditorView: View {
         NavigationStack {
             Form {
                 Section("service_editor.section.basic") {
-                    TextField("service_editor.name", text: $name)
+                    nameField
                     Picker("service_editor.category", selection: $category) {
                         ForEach(SubscriptionCategory.allCases, id: \.self) { category in
                             Text(LocalizedStringKey(category.labelKey)).tag(category)
@@ -72,6 +76,8 @@ public struct ServiceEditorView: View {
                         TextField("service_editor.category.custom", text: $customCategoryName)
                     }
                     amountField
+                    Toggle("service_editor.autoPayEnabled", isOn: $isAutoPayEnabled)
+                    Toggle("service_editor.pinned", isOn: $isPinned)
                     DatePicker("service_editor.nextBillingDate", selection: $nextBillingDate, displayedComponents: .date)
                     Picker("service_editor.billingCycle", selection: $billingCycle) {
                         Text("service_editor.billing.monthly").tag(BillingCycle.monthly)
@@ -152,14 +158,6 @@ public struct ServiceEditorView: View {
                 Section("service_editor.section.memo") {
                     TextField("service_editor.memo", text: $memo, axis: .vertical)
                 }
-
-                if let messageKey = validationMessageKey,
-                   messageKey != "service_editor.validation.amount" {
-                    Section {
-                        Text(LocalizedStringKey(messageKey))
-                            .foregroundStyle(Color.payDanger)
-                    }
-                }
             }
             #if os(iOS)
             .scrollDismissesKeyboard(.immediately)
@@ -231,6 +229,8 @@ public struct ServiceEditorView: View {
             iconColorKey: selectedIconColorKey,
             customCategoryName: category == .other ? sanitizedCustomCategoryName : nil,
             notificationsEnabled: notificationsEnabled,
+            isAutoPayEnabled: isAutoPayEnabled,
+            isPinned: isPinned,
             isActive: true,
             memo: memo.isEmpty ? nil : memo,
             createdAt: createdAt,
@@ -310,6 +310,19 @@ public struct ServiceEditorView: View {
     }
 
     @ViewBuilder
+    private var nameField: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            TextField("service_editor.name", text: nameInputBinding)
+
+            if nameHasError {
+                Text("service_editor.validation.name")
+                    .font(.caption)
+                    .foregroundStyle(Color.payDanger)
+            }
+        }
+    }
+
+    @ViewBuilder
     private var amountField: some View {
         Toggle("service_editor.amount.variable", isOn: $isAmountUndecided)
             .listRowSeparator(.hidden)
@@ -322,31 +335,52 @@ public struct ServiceEditorView: View {
             }
 
         if !isAmountUndecided {
-            HStack(spacing: PayBoardSpacing.xs) {
-                #if os(iOS)
-                TextField("service_editor.amount", text: amountInputBinding)
-                    .keyboardType(.numberPad)
-                    .textFieldStyle(.plain)
-                    .focused($focusedField, equals: .amount)
-                    .submitLabel(.done)
-                #else
-                TextField("service_editor.amount", text: amountInputBinding)
-                    .textFieldStyle(.plain)
-                    .focused($focusedField, equals: .amount)
-                    .submitLabel(.done)
-                #endif
-                Text("service_editor.amount.suffix")
-                    .foregroundStyle(Color.payMuted)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: PayBoardSpacing.xs) {
+                    #if os(iOS)
+                    TextField("service_editor.amount", text: amountInputBinding)
+                        .keyboardType(.numberPad)
+                        .textFieldStyle(.plain)
+                        .focused($focusedField, equals: .amount)
+                        .submitLabel(.done)
+                    #else
+                    TextField("service_editor.amount", text: amountInputBinding)
+                        .textFieldStyle(.plain)
+                        .focused($focusedField, equals: .amount)
+                        .submitLabel(.done)
+                    #endif
+                    Text("service_editor.amount.suffix")
+                        .foregroundStyle(Color.payMuted)
+                }
+
+                if amountHasError {
+                    Text("service_editor.validation.amount")
+                        .font(.caption)
+                        .foregroundStyle(Color.payDanger)
+                }
             }
             .listRowSeparator(.hidden)
         }
+    }
 
-        if validationMessageKey == "service_editor.validation.amount" {
-            Text("service_editor.validation.amount")
-                .font(.caption)
-                .foregroundStyle(Color.payDanger)
-                .listRowSeparator(.hidden)
-        }
+    private var nameHasError: Bool {
+        validationMessageKey == "service_editor.validation.name"
+    }
+
+    private var amountHasError: Bool {
+        validationMessageKey == "service_editor.validation.amount"
+    }
+
+    private var nameInputBinding: Binding<String> {
+        Binding(
+            get: { name },
+            set: { newValue in
+                name = newValue
+                if nameHasError && !newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    validationMessageKey = nil
+                }
+            }
+        )
     }
 
     private var amountInputBinding: Binding<String> {
@@ -355,7 +389,7 @@ public struct ServiceEditorView: View {
             set: { newValue in
                 let sanitized = Self.sanitizedAmountText(newValue)
                 amountText = Self.groupedAmountText(sanitized)
-                if validationMessageKey == "service_editor.validation.amount" {
+                if amountHasError && !sanitized.isEmpty {
                     validationMessageKey = nil
                 }
             }
