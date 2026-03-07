@@ -1,0 +1,8 @@
+kr.co.cdd.payboard.feature.settings-pngs-0 /Users/cdd/Documents/development/side-project/payboard/android/feature/settings/build/generated/res/pngs/debug
+kr.co.cdd.payboard.feature.settings-updated_navigation_xml-1 /Users/cdd/Documents/development/side-project/payboard/android/feature/settings/build/generated/updated_navigation_xml/debug
+kr.co.cdd.payboard.feature.settings-mergeDebugResources-2 /Users/cdd/Documents/development/side-project/payboard/android/feature/settings/build/intermediates/incremental/debug/mergeDebugResources/merged.dir
+kr.co.cdd.payboard.feature.settings-mergeDebugResources-3 /Users/cdd/Documents/development/side-project/payboard/android/feature/settings/build/intermediates/incremental/debug/mergeDebugResources/stripped.dir
+kr.co.cdd.payboard.feature.settings-debug-4 /Users/cdd/Documents/development/side-project/payboard/android/feature/settings/build/intermediates/merged_res/debug/mergeDebugResources
+kr.co.cdd.payboard.feature.settings-debug-5 /Users/cdd/Documents/development/side-project/payboard/android/feature/settings/build/intermediates/packaged_res/debug/packageDebugResources
+kr.co.cdd.payboard.feature.settings-debug-6 /Users/cdd/Documents/development/side-project/payboard/android/feature/settings/src/debug/res
+kr.co.cdd.payboard.feature.settings-main-7 /Users/cdd/Documents/development/side-project/payboard/android/feature/settings/src/main/res

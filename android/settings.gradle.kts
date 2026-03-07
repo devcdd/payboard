@@ -24,3 +24,10 @@ dependencyResolutionManagement {
 
 rootProject.name = "PayBoard"
 include(":app")
+include(":core:domain")
+include(":core:data")
+include(":core:designsystem")
+include(":core:app")
+include(":feature:board")
+include(":feature:archive")
+include(":feature:settings")

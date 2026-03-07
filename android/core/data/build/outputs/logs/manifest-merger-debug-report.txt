@@ -1,0 +1,16 @@
+-- Merging decision tree log ---
+manifest
+ADDED from /Users/cdd/Documents/development/side-project/payboard/android/core/data/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest18155628621905356378.xml:2:13-83
+INJECTED from /Users/cdd/Documents/development/side-project/payboard/android/core/data/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest18155628621905356378.xml:2:13-83
+	package
+		INJECTED from /Users/cdd/Documents/development/side-project/payboard/android/core/data/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest18155628621905356378.xml
+	xmlns:android
+		ADDED from /Users/cdd/Documents/development/side-project/payboard/android/core/data/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest18155628621905356378.xml:2:23-81
+uses-sdk
+INJECTED from /Users/cdd/Documents/development/side-project/payboard/android/core/data/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest18155628621905356378.xml reason: use-sdk injection requested
+INJECTED from /Users/cdd/Documents/development/side-project/payboard/android/core/data/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest18155628621905356378.xml
+INJECTED from /Users/cdd/Documents/development/side-project/payboard/android/core/data/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest18155628621905356378.xml
+	android:targetSdkVersion
+		INJECTED from /Users/cdd/Documents/development/side-project/payboard/android/core/data/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest18155628621905356378.xml
+	android:minSdkVersion
+		INJECTED from /Users/cdd/Documents/development/side-project/payboard/android/core/data/build/intermediates/tmp/ProcessLibraryManifest/debug/tempAndroidManifest18155628621905356378.xml
