@@ -1,8 +1,0 @@
-kr.co.cdd.payboard.core.data-pngs-0 /Users/cdd/Documents/development/side-project/payboard/android/core/data/build/generated/res/pngs/debug
-kr.co.cdd.payboard.core.data-updated_navigation_xml-1 /Users/cdd/Documents/development/side-project/payboard/android/core/data/build/generated/updated_navigation_xml/debug
-kr.co.cdd.payboard.core.data-mergeDebugResources-2 /Users/cdd/Documents/development/side-project/payboard/android/core/data/build/intermediates/incremental/debug/mergeDebugResources/merged.dir
-kr.co.cdd.payboard.core.data-mergeDebugResources-3 /Users/cdd/Documents/development/side-project/payboard/android/core/data/build/intermediates/incremental/debug/mergeDebugResources/stripped.dir
-kr.co.cdd.payboard.core.data-debug-4 /Users/cdd/Documents/development/side-project/payboard/android/core/data/build/intermediates/merged_res/debug/mergeDebugResources
-kr.co.cdd.payboard.core.data-debug-5 /Users/cdd/Documents/development/side-project/payboard/android/core/data/build/intermediates/packaged_res/debug/packageDebugResources
-kr.co.cdd.payboard.core.data-debug-6 /Users/cdd/Documents/development/side-project/payboard/android/core/data/src/debug/res
-kr.co.cdd.payboard.core.data-main-7 /Users/cdd/Documents/development/side-project/payboard/android/core/data/src/main/res
