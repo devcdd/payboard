@@ -189,6 +189,10 @@ class PayBoardStrings(
         AppLanguage.KOREAN -> "취소"
         AppLanguage.ENGLISH -> "Cancel"
     }
+    val confirm: String = when (language) {
+        AppLanguage.KOREAN -> "확인"
+        AppLanguage.ENGLISH -> "Confirm"
+    }
     val save: String = when (language) {
         AppLanguage.KOREAN -> "저장"
         AppLanguage.ENGLISH -> "Save"
@@ -325,14 +329,22 @@ class PayBoardStrings(
         AppLanguage.KOREAN -> "입력값을 확인해 주세요."
         AppLanguage.ENGLISH -> "Please check the form values."
     }
+    val errorTitle: String = when (language) {
+        AppLanguage.KOREAN -> "오류"
+        AppLanguage.ENGLISH -> "Error"
+    }
+    val unknownError: String = when (language) {
+        AppLanguage.KOREAN -> "알 수 없는 오류가 발생했습니다."
+        AppLanguage.ENGLISH -> "An unknown error occurred."
+    }
 
     val archiveTitle: String = when (language) {
         AppLanguage.KOREAN -> "보관함"
         AppLanguage.ENGLISH -> "Archive"
     }
     val archiveSubtitle: String = when (language) {
-        AppLanguage.KOREAN -> "보관된 구독은 iOS 동작과 동일한 흐름을 맞추는 동안 복구할 수 있습니다."
-        AppLanguage.ENGLISH -> "Archived subscriptions stay recoverable while Android catches up with iOS behavior."
+        AppLanguage.KOREAN -> "보관한 정기 결제 항목을 모아두는 곳입니다. 필요한 항목은 언제든 다시 꺼낼 수 있습니다."
+        AppLanguage.ENGLISH -> "This is where archived subscriptions are kept. You can restore any item whenever you need it."
     }
     val noArchivedSubscriptions: String = when (language) {
         AppLanguage.KOREAN -> "보관된 구독이 없습니다."
@@ -382,6 +394,38 @@ class PayBoardStrings(
     val pushNotificationsCaption: String = when (language) {
         AppLanguage.KOREAN -> "결제 리마인더와 테스트 알림을 받으려면 시스템 알림 권한이 필요합니다."
         AppLanguage.ENGLISH -> "System notification permission is required for reminders and test notifications."
+    }
+    val notificationChannelName: String = when (language) {
+        AppLanguage.KOREAN -> "PayBoard 리마인더"
+        AppLanguage.ENGLISH -> "PayBoard Reminders"
+    }
+    val notificationChannelDescription: String = when (language) {
+        AppLanguage.KOREAN -> "정기 결제 리마인더와 테스트 알림"
+        AppLanguage.ENGLISH -> "Subscription reminders and test notifications"
+    }
+    val notificationReminderTitle: String = when (language) {
+        AppLanguage.KOREAN -> "결제 예정 알림"
+        AppLanguage.ENGLISH -> "Upcoming payment"
+    }
+    val notificationReminderBodyFormat: String = when (language) {
+        AppLanguage.KOREAN -> "%s 결제가 곧 예정되어 있습니다."
+        AppLanguage.ENGLISH -> "%s payment is due soon."
+    }
+    val notificationAutoPayBodyTodayFormat: String = when (language) {
+        AppLanguage.KOREAN -> "%s 서비스가 오늘 자동이체 될 예정입니다."
+        AppLanguage.ENGLISH -> "%s will be charged by auto pay today."
+    }
+    val notificationAutoPayBodyTomorrowFormat: String = when (language) {
+        AppLanguage.KOREAN -> "%s 서비스가 내일 자동이체 될 예정입니다."
+        AppLanguage.ENGLISH -> "%s will be charged by auto pay tomorrow."
+    }
+    val notificationAutoPayBodyDayAfterTomorrowFormat: String = when (language) {
+        AppLanguage.KOREAN -> "%s 서비스가 이틀 후 자동이체 될 예정입니다."
+        AppLanguage.ENGLISH -> "%s will be charged by auto pay in two days."
+    }
+    val notificationAutoPayBodyDefaultFormat: String = when (language) {
+        AppLanguage.KOREAN -> "%s 서비스가 자동이체 될 예정입니다."
+        AppLanguage.ENGLISH -> "%s will be charged by auto pay soon."
     }
     val reminderOptions: String = when (language) {
         AppLanguage.KOREAN -> "리마인더 옵션"
@@ -667,6 +711,24 @@ class PayBoardStrings(
     fun selectedCount(count: Int): String = when (language) {
         AppLanguage.KOREAN -> "${count}개 선택됨"
         AppLanguage.ENGLISH -> "$count selected"
+    }
+
+    fun bulkDeleteConfirmMessage(count: Int): String = when (language) {
+        AppLanguage.KOREAN -> "선택한 ${count}개의 구독을 삭제할까요?"
+        AppLanguage.ENGLISH -> "Delete $count selected subscriptions?"
+    }
+
+    fun notificationReminderBody(subscriptionName: String): String =
+        String.format(locale, notificationReminderBodyFormat, subscriptionName)
+
+    fun notificationAutoPayBody(subscriptionName: String, daysBefore: Int): String {
+        val format = when (daysBefore) {
+            0 -> notificationAutoPayBodyTodayFormat
+            1 -> notificationAutoPayBodyTomorrowFormat
+            2 -> notificationAutoPayBodyDayAfterTomorrowFormat
+            else -> notificationAutoPayBodyDefaultFormat
+        }
+        return String.format(locale, format, subscriptionName)
     }
 
     fun formatCurrency(

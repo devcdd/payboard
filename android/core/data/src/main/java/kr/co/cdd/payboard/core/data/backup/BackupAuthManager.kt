@@ -11,6 +11,7 @@ import io.github.jan.supabase.auth.providers.Kakao
 import io.github.jan.supabase.createSupabaseClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -31,16 +32,20 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kr.co.cdd.payboard.core.data.notifications.SubscriptionReminderScheduler
 import kr.co.cdd.payboard.core.domain.model.BillingCycle
 import kr.co.cdd.payboard.core.domain.model.Subscription
 import kr.co.cdd.payboard.core.domain.model.SubscriptionCategory
 import kr.co.cdd.payboard.core.domain.repository.SubscriptionRepository
+import kr.co.cdd.payboard.core.domain.repository.UserPreferencesRepository
+import java.io.FileNotFoundException
 import java.io.IOException
 import java.math.BigDecimal
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.charset.StandardCharsets
 import java.time.Instant
+import java.time.OffsetDateTime
 
 enum class BackupAuthNotice {
     NOT_CONFIGURED,
@@ -77,6 +82,8 @@ data class BackupAuthState(
 class BackupAuthManager(
     context: Context,
     private val subscriptionRepository: SubscriptionRepository,
+    private val userPreferencesRepository: UserPreferencesRepository,
+    private val reminderScheduler: SubscriptionReminderScheduler,
 ) {
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -102,6 +109,9 @@ class BackupAuthManager(
         ),
     )
     val state: StateFlow<BackupAuthState> = _state.asStateFlow()
+    @Volatile
+    private var isHandlingAuthCallback = false
+    private var lastUploadRequestedAt: Instant? = null
 
     init {
         if (supabase != null) {
@@ -110,6 +120,7 @@ class BackupAuthManager(
     }
 
     fun refreshState() {
+        if (isHandlingAuthCallback) return
         scope.launch {
             refreshBackupAuthState()
         }
@@ -160,6 +171,7 @@ class BackupAuthManager(
                 isBusy = false,
                 isShowingRestorePromptAfterSignIn = false,
             )
+            lastUploadRequestedAt = null
         }.onFailure { error ->
             _state.value = _state.value.copy(
                 notice = BackupAuthNotice.SIGN_OUT_FAILED,
@@ -170,13 +182,31 @@ class BackupAuthManager(
     }
 
     suspend fun uploadBackup() {
-        val client = supabase ?: run {
-            _state.value = _state.value.copy(
-                notice = BackupAuthNotice.NOT_CONFIGURED,
-                debugText = configurationDebugText(appContext, false),
-            )
+        uploadBackup(showResultNotice = true)
+    }
+
+    suspend fun autoBackupAfterSubscriptionUpsert() {
+        uploadBackup(showResultNotice = false)
+    }
+
+    private suspend fun uploadBackup(showResultNotice: Boolean) {
+        val now = Instant.now()
+        val lastRequestedAt = lastUploadRequestedAt
+        if (lastRequestedAt != null && now.toEpochMilli() - lastRequestedAt.toEpochMilli() < UPLOAD_DEBOUNCE_MILLIS) {
             return
         }
+        lastUploadRequestedAt = now
+
+        val client = supabase ?: run {
+            if (showResultNotice) {
+                _state.value = _state.value.copy(
+                    notice = BackupAuthNotice.NOT_CONFIGURED,
+                    debugText = configurationDebugText(appContext, false),
+                )
+            }
+            return
+        }
+        if (!showResultNotice && !_state.value.isSignedIn) return
         if (_state.value.isSyncInProgress || _state.value.isAccountDeletionInProgress) return
 
         _state.value = _state.value.copy(isSyncInProgress = true, debugText = null)
@@ -192,13 +222,13 @@ class BackupAuthManager(
             )
             _state.value = _state.value.copy(
                 latestBackupAt = timestamp,
-                notice = BackupAuthNotice.UPLOAD_SUCCESS,
+                notice = if (showResultNotice) BackupAuthNotice.UPLOAD_SUCCESS else _state.value.notice,
                 debugText = null,
                 isSyncInProgress = false,
             )
         } catch (error: Throwable) {
             _state.value = _state.value.copy(
-                notice = BackupAuthNotice.UPLOAD_FAILED,
+                notice = if (showResultNotice) BackupAuthNotice.UPLOAD_FAILED else _state.value.notice,
                 debugText = describeBackupError(error, "upload"),
                 isSyncInProgress = false,
             )
@@ -240,6 +270,9 @@ class BackupAuthManager(
                 accessToken = session.accessToken,
                 userId = userId,
             )
+            if (metadata.itemCount > 0 && remoteSubscriptions.isEmpty()) {
+                throw FileNotFoundException("Backup items not found")
+            }
             val remotePaymentHistories = fetchRemotePaymentHistories(
                 accessToken = session.accessToken,
                 userId = userId,
@@ -249,6 +282,10 @@ class BackupAuthManager(
                 paymentHistories = remotePaymentHistories,
             )
             subscriptionRepository.replaceAll(restoredSubscriptions)
+            reminderScheduler.syncAll(
+                restoredSubscriptions.filter(Subscription::isActive),
+                userPreferencesRepository.preferences.first(),
+            )
             _state.value = _state.value.copy(
                 latestBackupAt = metadata.updatedAt,
                 notice = BackupAuthNotice.RESTORE_SUCCESS,
@@ -298,6 +335,7 @@ class BackupAuthManager(
                 isAccountDeletionInProgress = false,
                 isShowingRestorePromptAfterSignIn = false,
             )
+            lastUploadRequestedAt = null
         } catch (error: Throwable) {
             _state.value = _state.value.copy(
                 notice = BackupAuthNotice.DELETE_ACCOUNT_FAILED,
@@ -322,28 +360,39 @@ class BackupAuthManager(
 
     fun handleDeepLink(intent: Intent) {
         val client = supabase ?: return
+        val data = intent.data ?: return
+        if (!isBackupAuthDeepLink(data)) return
+
+        isHandlingAuthCallback = true
         _state.value = _state.value.copy(isBusy = true)
         client.handleDeeplinks(
             intent = intent,
             onSessionSuccess = { session ->
                 scope.launch {
-                    val userId = session.user?.id?.toString().orEmpty()
-                    val accountIdentifier = session.user?.email ?: userId
-                    _state.value = _state.value.copy(
-                        isBusy = false,
-                        isSignedIn = true,
-                        accountIdentifier = accountIdentifier,
-                        notice = BackupAuthNotice.SIGN_IN_SUCCESS,
-                        debugText = null,
-                    )
-                    bootstrapBackupAfterSignIn(
-                        accessToken = session.accessToken,
-                        userId = userId,
-                        accountIdentifier = accountIdentifier,
-                    )
+                    try {
+                        client.auth.importSession(session)
+                        val userId = session.user?.id?.toString().orEmpty()
+                        val accountIdentifier = session.user?.email ?: userId
+                        _state.value = _state.value.copy(
+                            isBusy = false,
+                            isSignedIn = true,
+                            accountIdentifier = accountIdentifier,
+                            notice = BackupAuthNotice.SIGN_IN_SUCCESS,
+                            debugText = null,
+                        )
+                        bootstrapBackupAfterSignIn(
+                            accessToken = session.accessToken,
+                            userId = userId,
+                            accountIdentifier = accountIdentifier,
+                        )
+                        refreshBackupAuthState()
+                    } finally {
+                        isHandlingAuthCallback = false
+                    }
                 }
             },
             onError = { error ->
+                isHandlingAuthCallback = false
                 _state.value = _state.value.copy(
                     isBusy = false,
                     notice = BackupAuthNotice.SIGN_IN_FAILED,
@@ -380,13 +429,13 @@ class BackupAuthManager(
                 debugText = null,
                 isBusy = false,
             )
-        } catch (_: Throwable) {
+        } catch (error: Throwable) {
             _state.value = _state.value.copy(
                 isConfigured = true,
                 isSignedIn = false,
                 accountIdentifier = null,
                 latestBackupAt = null,
-                debugText = null,
+                debugText = describeBackupError(error, "refresh_auth"),
                 isBusy = false,
             )
         }
@@ -796,7 +845,7 @@ class BackupAuthManager(
 
     private fun JsonObject.toBackupMetadata(): BackupMetadata = BackupMetadata(
         itemCount = int("item_count"),
-        updatedAt = Instant.parse(string("updated_at")),
+        updatedAt = parseInstantValue(string("updated_at")),
     )
 
     private fun JsonObject.toRemoteSubscriptionItem(): RemoteSubscriptionItem = RemoteSubscriptionItem(
@@ -808,8 +857,8 @@ class BackupAuthManager(
         currencyCode = string("currency_code"),
         billingCycleKind = string("billing_cycle_kind"),
         billingCycleDays = optionalInt("billing_cycle_days"),
-        nextBillingDate = Instant.parse(string("next_billing_date")),
-        lastPaymentDate = optionalString("last_payment_date")?.let(Instant::parse),
+        nextBillingDate = parseInstantValue(string("next_billing_date")),
+        lastPaymentDate = optionalString("last_payment_date")?.let(::parseInstantValue),
         iconKey = string("icon_key"),
         iconColorKey = string("icon_color_key"),
         customCategoryName = optionalString("custom_category_name"),
@@ -819,13 +868,13 @@ class BackupAuthManager(
         isActive = boolean("is_active"),
         memo = optionalString("memo"),
         sortOrder = int("sort_order"),
-        createdAt = Instant.parse(string("created_at")),
-        updatedAt = Instant.parse(string("updated_at")),
+        createdAt = parseInstantValue(string("created_at")),
+        updatedAt = parseInstantValue(string("updated_at")),
     )
 
     private fun JsonObject.toRemotePaymentHistory(): RemotePaymentHistory = RemotePaymentHistory(
         subscriptionId = string("subscription_id"),
-        paidAt = Instant.parse(string("paid_at")),
+        paidAt = parseInstantValue(string("paid_at")),
     )
 
     private fun RemoteSubscriptionItem.toSubscription(paymentHistoryDates: List<Instant>): Subscription {
@@ -932,6 +981,7 @@ class BackupAuthManager(
         const val DEEP_LINK_HOST = "auth"
         const val DEEP_LINK_PATH = "/callback"
         const val DEEP_LINK_REDIRECT_URL = "$DEEP_LINK_SCHEME://$DEEP_LINK_HOST$DEEP_LINK_PATH"
+        private const val UPLOAD_DEBOUNCE_MILLIS = 800L
 
         private const val LATEST_BACKUPS_TABLE = "subscription_latest_backups"
         private const val BACKUP_ITEMS_TABLE = "subscription_items"
@@ -958,6 +1008,15 @@ class BackupAuthManager(
                 "isBackupConfigured: $isConfigured",
             ).joinToString(separator = "\n")
         }
+
+        private fun parseInstantValue(value: String): Instant =
+            runCatching { Instant.parse(value) }
+                .getOrElse { OffsetDateTime.parse(value).toInstant() }
+
+        private fun isBackupAuthDeepLink(uri: Uri): Boolean =
+            uri.scheme == DEEP_LINK_SCHEME &&
+                uri.host == DEEP_LINK_HOST &&
+                uri.path == DEEP_LINK_PATH
 
         private fun normalizedMetaDataValue(context: Context, key: String): String? {
             val applicationInfo = context.packageManager.getApplicationInfo(

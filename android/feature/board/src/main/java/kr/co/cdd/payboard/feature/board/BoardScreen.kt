@@ -144,6 +144,7 @@ fun BoardRoute(
         onCancelPaymentComplete = viewModel::cancelPaymentComplete,
         onCancelPaymentCompleteSelected = viewModel::cancelPaymentComplete,
         onSetPinned = viewModel::setPinned,
+        onClearError = viewModel::clearError,
     )
 }
 
@@ -166,6 +167,7 @@ fun BoardScreen(
     onCancelPaymentComplete: (Subscription) -> Unit,
     onCancelPaymentCompleteSelected: (Set<UUID>) -> Unit,
     onSetPinned: (Subscription, Boolean) -> Unit,
+    onClearError: () -> Unit,
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -194,6 +196,7 @@ fun BoardScreen(
     var quickIconTarget by remember { mutableStateOf<Subscription?>(null) }
     var quickIconQuery by remember { mutableStateOf("") }
     var pendingDeleteSubscription by remember { mutableStateOf<Subscription?>(null) }
+    var pendingBulkDeleteIds by remember { mutableStateOf<Set<UUID>>(emptySet()) }
     var customSortOrderIds by remember { mutableStateOf(loadCustomSortOrder(boardPrefs)) }
     val boardGridState = rememberLazyGridState()
     val boardSubscriptions = remember(
@@ -678,8 +681,7 @@ fun BoardScreen(
                     clearSelection()
                 },
                 onDeleteSelected = {
-                    onDeleteSubscriptions(selectedSubscriptionIds)
-                    clearSelection()
+                    pendingBulkDeleteIds = selectedSubscriptionIds
                 },
             )
         }
@@ -757,6 +759,46 @@ fun BoardScreen(
             dismissButton = {
                 TextButton(onClick = { pendingDeleteSubscription = null }) {
                     Text(strings.cancel)
+                }
+            },
+        )
+    }
+
+    if (pendingBulkDeleteIds.isNotEmpty()) {
+        AlertDialog(
+            onDismissRequest = { pendingBulkDeleteIds = emptySet() },
+            title = { Text(strings.deleteSelected) },
+            text = { Text(strings.bulkDeleteConfirmMessage(pendingBulkDeleteIds.size)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDeleteSubscriptions(pendingBulkDeleteIds)
+                        pendingBulkDeleteIds = emptySet()
+                        clearSelection()
+                    },
+                ) {
+                    Text(
+                        text = strings.deleteSelected,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingBulkDeleteIds = emptySet() }) {
+                    Text(strings.cancel)
+                }
+            },
+        )
+    }
+
+    if (state.errorMessage != null) {
+        AlertDialog(
+            onDismissRequest = onClearError,
+            title = { Text(strings.errorTitle) },
+            text = { Text(state.errorMessage?.takeIf { it.isNotBlank() } ?: strings.unknownError) },
+            confirmButton = {
+                TextButton(onClick = onClearError) {
+                    Text(strings.confirm)
                 }
             },
         )

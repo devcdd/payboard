@@ -147,14 +147,7 @@ fun SettingsScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(strings.settingsTitle, style = MaterialTheme.typography.headlineMedium)
-                Text(
-                    strings.settingsSubtitle,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            Text(strings.settingsTitle, style = MaterialTheme.typography.headlineMedium)
         }
 
         item {
@@ -474,24 +467,6 @@ fun SettingsScreen(
             dismissButton = {
                 Button(onClick = { isShowingDeleteAccountConfirm = false }) {
                     Text(strings.cancel)
-                }
-            },
-        )
-    }
-
-    if (backupAuthState.isShowingRestorePromptAfterSignIn) {
-        AlertDialog(
-            onDismissRequest = onSkipRestoreAfterSignIn,
-            title = { Text(strings.backupRestorePromptTitle) },
-            text = { Text(strings.backupRestorePromptMessage) },
-            confirmButton = {
-                Button(onClick = onConfirmRestoreAfterSignIn) {
-                    Text(strings.backupRestorePromptRestore)
-                }
-            },
-            dismissButton = {
-                Button(onClick = onSkipRestoreAfterSignIn) {
-                    Text(strings.backupRestorePromptSkip)
                 }
             },
         )

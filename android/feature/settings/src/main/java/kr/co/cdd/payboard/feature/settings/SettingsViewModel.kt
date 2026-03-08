@@ -11,17 +11,22 @@ import kr.co.cdd.payboard.core.data.backup.BackupAuthManager
 import kr.co.cdd.payboard.core.data.backup.BackupAuthState
 import kr.co.cdd.payboard.core.data.notifications.NotificationSettingsManager
 import kr.co.cdd.payboard.core.data.notifications.NotificationSettingsState
+import kr.co.cdd.payboard.core.data.notifications.SubscriptionReminderScheduler
 import kr.co.cdd.payboard.core.domain.model.AppAppearance
 import kr.co.cdd.payboard.core.domain.model.AppLanguage
 import kr.co.cdd.payboard.core.domain.model.InitialScreen
 import kr.co.cdd.payboard.core.domain.model.ReminderOption
 import kr.co.cdd.payboard.core.domain.model.UserPreferences
+import kr.co.cdd.payboard.core.domain.model.Subscription
+import kr.co.cdd.payboard.core.domain.repository.SubscriptionRepository
 import kr.co.cdd.payboard.core.domain.repository.UserPreferencesRepository
 
 class SettingsViewModel(
     private val repository: UserPreferencesRepository,
+    private val subscriptionRepository: SubscriptionRepository,
     private val backupAuthManager: BackupAuthManager,
     private val notificationSettingsManager: NotificationSettingsManager,
+    private val reminderScheduler: SubscriptionReminderScheduler,
 ) : ViewModel() {
     val preferences: StateFlow<UserPreferences> = repository.preferences.stateIn(
         scope = viewModelScope,
@@ -48,7 +53,10 @@ class SettingsViewModel(
     }
 
     fun setPushNotificationsEnabled(enabled: Boolean) {
-        viewModelScope.launch { repository.setPushNotificationsEnabled(enabled) }
+        viewModelScope.launch {
+            repository.setPushNotificationsEnabled(enabled)
+            syncAllReminders(preferences.value.copy(pushNotificationsEnabled = enabled))
+        }
     }
 
     fun toggleReminderOption(option: ReminderOption, isEnabled: Boolean) {
@@ -58,11 +66,24 @@ class SettingsViewModel(
         } else {
             next -= option
         }
-        viewModelScope.launch { repository.setReminderOptions(next) }
+        viewModelScope.launch {
+            repository.setReminderOptions(next)
+            syncAllReminders(preferences.value.copy(reminderOptions = next))
+        }
     }
 
     fun setReminderTime(hour: Int, minute: Int) {
-        viewModelScope.launch { repository.setReminderTime(hour, minute) }
+        viewModelScope.launch {
+            val normalizedHour = hour.coerceIn(0, 23)
+            val normalizedMinute = minute.coerceIn(0, 59)
+            repository.setReminderTime(normalizedHour, normalizedMinute)
+            syncAllReminders(
+                preferences.value.copy(
+                    reminderHour = normalizedHour,
+                    reminderMinute = normalizedMinute,
+                ),
+            )
+        }
     }
 
     fun signInWithKakao() {
@@ -121,16 +142,29 @@ class SettingsViewModel(
         notificationSettingsManager.sendTestNotification()
     }
 
+    private suspend fun syncAllReminders(targetPreferences: UserPreferences) {
+        val subscriptions = subscriptionRepository.fetchAll().filter(Subscription::isActive)
+        reminderScheduler.syncAll(subscriptions, targetPreferences)
+    }
+
     companion object {
         fun factory(
             repository: UserPreferencesRepository,
+            subscriptionRepository: SubscriptionRepository,
             backupAuthManager: BackupAuthManager,
             notificationSettingsManager: NotificationSettingsManager,
+            reminderScheduler: SubscriptionReminderScheduler,
         ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                    return SettingsViewModel(repository, backupAuthManager, notificationSettingsManager) as T
+                    return SettingsViewModel(
+                        repository = repository,
+                        subscriptionRepository = subscriptionRepository,
+                        backupAuthManager = backupAuthManager,
+                        notificationSettingsManager = notificationSettingsManager,
+                        reminderScheduler = reminderScheduler,
+                    ) as T
                 }
             }
     }

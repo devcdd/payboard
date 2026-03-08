@@ -16,12 +16,15 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -55,17 +58,30 @@ fun PayBoardApp() {
     val settingsViewModel: SettingsViewModel = viewModel(
         factory = SettingsViewModel.factory(
             repository = container.userPreferencesRepository,
+            subscriptionRepository = container.subscriptionRepository,
             backupAuthManager = container.backupAuthManager,
             notificationSettingsManager = container.notificationSettingsManager,
+            reminderScheduler = container.subscriptionReminderScheduler,
         ),
     )
     val boardViewModel: BoardViewModel = viewModel(
-        factory = BoardViewModel.factory(container.subscriptionRepository),
+        factory = BoardViewModel.factory(
+            repository = container.subscriptionRepository,
+            backupAuthManager = container.backupAuthManager,
+            userPreferencesRepository = container.userPreferencesRepository,
+            reminderScheduler = container.subscriptionReminderScheduler,
+        ),
     )
     val archiveViewModel: ArchiveViewModel = viewModel(
-        factory = ArchiveViewModel.factory(container.subscriptionRepository),
+        factory = ArchiveViewModel.factory(
+            repository = container.subscriptionRepository,
+            backupAuthManager = container.backupAuthManager,
+            userPreferencesRepository = container.userPreferencesRepository,
+            reminderScheduler = container.subscriptionReminderScheduler,
+        ),
     )
     val preferences by settingsViewModel.preferences.collectAsStateWithLifecycle()
+    val backupAuthState by settingsViewModel.backupAuthState.collectAsStateWithLifecycle()
     val navController = rememberNavController()
     val startDestination = remember(preferences.initialScreen) {
         if (preferences.initialScreen == InitialScreen.CALENDAR) Route.Calendar.route else Route.Board.route
@@ -79,6 +95,9 @@ fun PayBoardApp() {
 
     PayBoardTheme(darkTheme = darkTheme) {
         CompositionLocalProvider(LocalPayBoardStrings provides strings) {
+            LaunchedEffect(boardViewModel) {
+                boardViewModel.bootstrapOnAppStart()
+            }
             val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
 
             Scaffold(
@@ -145,6 +164,24 @@ fun PayBoardApp() {
                         SettingsRoute(viewModel = settingsViewModel)
                     }
                 }
+            }
+
+            if (backupAuthState.isShowingRestorePromptAfterSignIn) {
+                AlertDialog(
+                    onDismissRequest = settingsViewModel::skipRestoreAfterSignIn,
+                    title = { Text(strings.backupRestorePromptTitle) },
+                    text = { Text(strings.backupRestorePromptMessage) },
+                    confirmButton = {
+                        Button(onClick = settingsViewModel::confirmRestoreAfterSignIn) {
+                            Text(strings.backupRestorePromptRestore)
+                        }
+                    },
+                    dismissButton = {
+                        Button(onClick = settingsViewModel::skipRestoreAfterSignIn) {
+                            Text(strings.backupRestorePromptSkip)
+                        }
+                    },
+                )
             }
         }
     }

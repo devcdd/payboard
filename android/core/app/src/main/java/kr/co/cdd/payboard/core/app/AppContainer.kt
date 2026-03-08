@@ -7,6 +7,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import kr.co.cdd.payboard.core.data.backup.BackupAuthManager
 import kr.co.cdd.payboard.core.data.notifications.NotificationSettingsManager
+import kr.co.cdd.payboard.core.data.notifications.SubscriptionReminderScheduler
 import kr.co.cdd.payboard.core.data.repository.FileSubscriptionRepository
 import kr.co.cdd.payboard.core.data.settings.UserPreferencesDataStore
 import kr.co.cdd.payboard.core.domain.repository.SubscriptionRepository
@@ -17,8 +18,14 @@ class AppContainer(
 ) {
     val subscriptionRepository: SubscriptionRepository = FileSubscriptionRepository(context)
     val userPreferencesRepository: UserPreferencesRepository = UserPreferencesDataStore(context)
-    val backupAuthManager: BackupAuthManager = BackupAuthManager(context, subscriptionRepository)
     val notificationSettingsManager: NotificationSettingsManager = NotificationSettingsManager(context)
+    val subscriptionReminderScheduler: SubscriptionReminderScheduler = SubscriptionReminderScheduler(context)
+    val backupAuthManager: BackupAuthManager = BackupAuthManager(
+        context = context,
+        subscriptionRepository = subscriptionRepository,
+        userPreferencesRepository = userPreferencesRepository,
+        reminderScheduler = subscriptionReminderScheduler,
+    )
 
     fun handleAuthDeepLink(intent: Intent) {
         backupAuthManager.handleDeepLink(intent)
