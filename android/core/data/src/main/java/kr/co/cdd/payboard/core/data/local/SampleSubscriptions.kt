@@ -17,7 +17,7 @@ internal object SampleSubscriptions {
                 amount = BigDecimal("17000"),
                 billingCycle = BillingCycle.Monthly,
                 nextBillingDate = now.plus(3, ChronoUnit.DAYS),
-                iconKey = "N",
+                iconKey = "icon_netflix",
                 iconColorKey = "red",
             ),
             Subscription(
@@ -26,7 +26,7 @@ internal object SampleSubscriptions {
                 amount = BigDecimal("10900"),
                 billingCycle = BillingCycle.Monthly,
                 nextBillingDate = now.plus(8, ChronoUnit.DAYS),
-                iconKey = "S",
+                iconKey = "icon_spotify",
                 iconColorKey = "green",
             ),
             Subscription(
@@ -35,7 +35,7 @@ internal object SampleSubscriptions {
                 amount = BigDecimal("4400"),
                 billingCycle = BillingCycle.Monthly,
                 nextBillingDate = now.plus(14, ChronoUnit.DAYS),
-                iconKey = "i",
+                iconKey = "icon_icloud",
                 iconColorKey = "blue",
             ),
         )

@@ -2,15 +2,29 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
+        android:name=".PayBoardApplication"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.PayBoard">
+        <meta-data
+            android:name="SUPABASE_URL"
+            android:value="${SUPABASE_URL}" />
+        <meta-data
+            android:name="SUPABASE_ANON_KEY"
+            android:value="${SUPABASE_ANON_KEY}" />
+        <meta-data
+            android:name="PAYBOARD_SERVER_URL"
+            android:value="${PAYBOARD_SERVER_URL}" />
+
         <activity
             android:name="kr.co.cdd.payboard.MainActivity"
             android:exported="true"
@@ -20,6 +34,17 @@
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data
+                    android:host="auth"
+                    android:path="/callback"
+                    android:scheme="payboard" />
             </intent-filter>
         </activity>
     </application>

@@ -19,8 +19,11 @@ android {
 
 dependencies {
     implementation(project(":core:domain"))
+    implementation(platform(libs.supabase.bom))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.datastore.preferences)
+    implementation(libs.ktor.client.okhttp)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.supabase.auth)
 }

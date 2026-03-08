@@ -32,4 +32,5 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel)
     implementation(libs.androidx.compose.material.icons.extended)
+    implementation(libs.reorderable)
 }

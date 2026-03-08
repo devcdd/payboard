@@ -17,9 +17,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kr.co.cdd.payboard.core.designsystem.component.PayBoardPanel
+import kr.co.cdd.payboard.core.designsystem.i18n.LocalPayBoardStrings
 import kr.co.cdd.payboard.core.domain.model.Subscription
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 
 @Composable
 fun ArchiveRoute(viewModel: ArchiveViewModel) {
@@ -37,6 +36,7 @@ fun ArchiveScreen(
     onRestore: (Subscription) -> Unit,
     onDelete: (Subscription) -> Unit,
 ) {
+    val strings = LocalPayBoardStrings.current
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
@@ -44,9 +44,9 @@ fun ArchiveScreen(
     ) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Archive", style = MaterialTheme.typography.headlineMedium)
+                Text(strings.archiveTitle, style = MaterialTheme.typography.headlineMedium)
                 Text(
-                    "Archived subscriptions stay recoverable while Android catches up with iOS behavior.",
+                    strings.archiveSubtitle,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -56,7 +56,7 @@ fun ArchiveScreen(
         if (subscriptions.isEmpty()) {
             item {
                 PayBoardPanel {
-                    Text("No archived subscriptions.")
+                    Text(strings.noArchivedSubscriptions)
                 }
             }
         } else {
@@ -65,7 +65,7 @@ fun ArchiveScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(subscription.name, style = MaterialTheme.typography.titleMedium)
                         Text(
-                            "Archived ${subscription.updatedAt.formatDate()}",
+                            strings.archiveDateLabel(subscription.updatedAt),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -74,10 +74,10 @@ fun ArchiveScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             Button(onClick = { onRestore(subscription) }, modifier = Modifier.weight(1f)) {
-                                Text("Restore")
+                                Text(strings.restore)
                             }
                             Button(onClick = { onDelete(subscription) }, modifier = Modifier.weight(1f)) {
-                                Text("Delete")
+                                Text(strings.delete)
                             }
                         }
                     }
@@ -86,7 +86,3 @@ fun ArchiveScreen(
         }
     }
 }
-
-private fun java.time.Instant.formatDate(): String = DateTimeFormatter.ofPattern("yyyy.MM.dd")
-    .withZone(ZoneId.systemDefault())
-    .format(this)

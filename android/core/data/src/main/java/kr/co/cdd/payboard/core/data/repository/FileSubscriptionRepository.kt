@@ -32,6 +32,18 @@ class FileSubscriptionRepository(
                 .sortedByDescending(Subscription::updatedAt)
         }
 
+    override suspend fun fetchAll(): List<Subscription> = withContext(Dispatchers.IO) {
+        allSubscriptions.value.toList()
+    }
+
+    override suspend fun replaceAll(subscriptions: List<Subscription>) {
+        withContext(Dispatchers.IO) {
+            subscriptions.forEach(Subscription::validate)
+            store.save(subscriptions)
+            allSubscriptions.value = subscriptions
+        }
+    }
+
     override suspend fun create(subscription: Subscription) {
         persist {
             subscription.validate()

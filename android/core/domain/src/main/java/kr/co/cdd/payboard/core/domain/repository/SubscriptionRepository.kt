@@ -8,6 +8,8 @@ interface SubscriptionRepository {
     fun observeActive(): Flow<List<Subscription>>
     fun observeArchived(): Flow<List<Subscription>>
 
+    suspend fun fetchAll(): List<Subscription>
+    suspend fun replaceAll(subscriptions: List<Subscription>)
     suspend fun create(subscription: Subscription)
     suspend fun update(subscription: Subscription)
     suspend fun delete(id: UUID)

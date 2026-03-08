@@ -14,4 +14,13 @@ object BillingDateCalculator {
             is BillingCycle.CustomDays -> zoned.plusDays(cycle.days.toLong().coerceAtLeast(1)).toInstant()
         }
     }
+
+    fun rewind(from: Instant, cycle: BillingCycle, zoneId: ZoneId = ZoneId.systemDefault()): Instant {
+        val zoned = ZonedDateTime.ofInstant(from, zoneId)
+        return when (cycle) {
+            BillingCycle.Monthly -> zoned.minusMonths(1).toInstant()
+            BillingCycle.Yearly -> zoned.minusYears(1).toInstant()
+            is BillingCycle.CustomDays -> zoned.minusDays(cycle.days.toLong().coerceAtLeast(1)).toInstant()
+        }
+    }
 }
