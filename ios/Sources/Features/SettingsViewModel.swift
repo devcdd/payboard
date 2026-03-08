@@ -138,6 +138,7 @@ public final class SettingsViewModel: ObservableObject {
     @Published public private(set) var backupAccountIdentifier: String?
     @Published public private(set) var backupMessageKey: String?
     @Published public private(set) var backupErrorDebugText: String?
+    @Published public private(set) var isBackupSignInInProgress = false
     @Published public private(set) var isBackupSyncInProgress = false
     @Published public private(set) var isAccountDeletionInProgress = false
     @Published public var isShowingRestorePromptAfterSignIn = false
@@ -304,6 +305,7 @@ public final class SettingsViewModel: ObservableObject {
             "BUNDLE SUPABASE_ANON_KEY: \(bundleKey.map(Self.maskSecretValue) ?? "<nil>")",
             "ENV PAYBOARD_SERVER_URL: \(envServerURL ?? "<nil>")",
             "BUNDLE PAYBOARD_SERVER_URL: \(bundleServerURL ?? "<nil>")",
+            "BACKUP AUTH REDIRECT URL: \(Self.loadBackupAuthRedirectURL()?.absoluteString ?? "<nil>")",
             "NORMALIZED URL: \(normalizedURL)",
             "NORMALIZED KEY: \(normalizedKey)",
             "NORMALIZED SERVER URL: \(normalizedServerURL)",
@@ -367,6 +369,43 @@ public final class SettingsViewModel: ObservableObject {
         case let .failure(error):
             backupMessageKey = "settings.backup.signIn.failed"
             backupErrorDebugText = Self.describeBackupSignInError(error, stage: "apple")
+        }
+    }
+
+    public func signInWithKakao() async {
+        guard !isBackupSignInInProgress else { return }
+
+        backupErrorDebugText = nil
+        guard let supabaseClient else {
+            backupMessageKey = "settings.backup.notConfigured"
+            return
+        }
+        guard let redirectTo = Self.loadBackupAuthRedirectURL() else {
+            backupMessageKey = "settings.backup.signIn.redirectNotConfigured"
+            backupErrorDebugText = "PAYBOARD_AUTH_URL_SCHEME is missing"
+            return
+        }
+
+        isBackupSignInInProgress = true
+        defer { isBackupSignInInProgress = false }
+
+        do {
+            _ = try await supabaseClient.auth.signInWithOAuth(
+                provider: .kakao,
+                redirectTo: redirectTo
+            )
+            await refreshBackupAuthState()
+            backupMessageKey = "settings.backup.signIn.success"
+            backupErrorDebugText = nil
+            await bootstrapBackupAfterSignIn()
+        } catch {
+            if Self.isOAuthCancellationError(error) {
+                backupMessageKey = "settings.backup.signIn.cancelled"
+                backupErrorDebugText = nil
+                return
+            }
+            backupMessageKey = "settings.backup.signIn.failed.kakao"
+            backupErrorDebugText = Self.describeBackupSignInError(error, stage: "kakao")
         }
     }
 
@@ -625,6 +664,25 @@ public final class SettingsViewModel: ObservableObject {
         return url
     }
 
+    private static func loadBackupAuthRedirectURL() -> URL? {
+        let processEnvironment = ProcessInfo.processInfo.environment
+        let scheme = normalizedSecretValue(
+            processEnvironment["PAYBOARD_AUTH_URL_SCHEME"]
+                ?? processEnvironment["INFOPLIST_KEY_PAYBOARD_AUTH_URL_SCHEME"]
+                ?? infoDictionaryStringValue(forPrimaryKey: "PAYBOARD_AUTH_URL_SCHEME", fallbackKey: "INFOPLIST_KEY_PAYBOARD_AUTH_URL_SCHEME")
+        )
+
+        guard let scheme else {
+            return nil
+        }
+
+        var components = URLComponents()
+        components.scheme = scheme
+        components.host = "auth"
+        components.path = "/callback"
+        return components.url
+    }
+
     private static func infoDictionaryStringValue(forPrimaryKey primaryKey: String, fallbackKey: String) -> String? {
         if let value = Bundle.main.object(forInfoDictionaryKey: primaryKey) as? String {
             return value
@@ -660,6 +718,12 @@ public final class SettingsViewModel: ObservableObject {
     private static func describeBackupSyncError(_ error: any Error, operation: String) -> String {
         let nsError = error as NSError
         return "operation=\(operation), domain=\(nsError.domain), code=\(nsError.code), desc=\(nsError.localizedDescription)"
+    }
+
+    private static func isOAuthCancellationError(_ error: any Error) -> Bool {
+        let nsError = error as NSError
+        return nsError.domain == ASWebAuthenticationSessionError.errorDomain
+            && nsError.code == ASWebAuthenticationSessionError.canceledLogin.rawValue
     }
 
     private func deleteAccountFromServer(

@@ -102,7 +102,7 @@ public struct SettingsView: View {
                         }
                         .disabled(viewModel.isBackupSyncInProgress || viewModel.isAccountDeletionInProgress)
                     } else {
-                        appleSignInImageButton
+                        backupSignInButtons
                     }
 
                     if let messageKey = viewModel.backupMessageKey {
@@ -113,6 +113,9 @@ public struct SettingsView: View {
 
                     if viewModel.isAccountDeletionInProgress {
                         ProgressView("settings.backup.deleteAccount.inProgress")
+                            .font(.caption)
+                    } else if viewModel.isBackupSignInInProgress {
+                        ProgressView("settings.backup.signIn.inProgress")
                             .font(.caption)
                     } else if viewModel.isBackupSyncInProgress {
                         ProgressView("settings.backup.sync.inProgress")
@@ -288,6 +291,31 @@ public struct SettingsView: View {
         .listRowBackground(Color.clear)
     }
 
+    private var kakaoSignInImageButton: some View {
+        Button {
+            Task { await viewModel.signInWithKakao() }
+        } label: {
+            Image(kakaoSignInAssetName)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.plain)
+        .aspectRatio(800.0 / 128.0, contentMode: .fit)
+        .contentShape(Rectangle())
+        .accessibilityLabel(Text("settings.backup.signIn.kakao.accessibilityLabel"))
+        .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
+        .listRowBackground(Color.clear)
+        .disabled(viewModel.isBackupSignInInProgress)
+    }
+
+    private var backupSignInButtons: some View {
+        VStack(spacing: 12) {
+            kakaoSignInImageButton
+            appleSignInImageButton
+        }
+    }
+
     private var appleSignInAssetName: String {
         let isKorean = locale.language.languageCode?.identifier == "ko"
         switch (isKorean, colorScheme == .dark) {
@@ -300,6 +328,10 @@ public struct SettingsView: View {
         case (false, false):
             return "button_apple_login_us"
         }
+    }
+
+    private var kakaoSignInAssetName: String {
+        locale.language.languageCode?.identifier == "ko" ? "button_kakao_login_kr" : "button_kakao_login_us"
     }
 
     private func startAppleSignIn() {

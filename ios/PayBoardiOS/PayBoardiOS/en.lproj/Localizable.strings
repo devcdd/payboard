@@ -28,8 +28,13 @@
 "settings.backup.signOut" = "Sign out";
 "settings.backup.signIn.invalidCredential" = "Could not read Apple sign-in credentials.";
 "settings.backup.signIn.missingNonce" = "Sign-in request expired. Please try again.";
+"settings.backup.signIn.redirectNotConfigured" = "The sign-in callback is missing, so sign-in cannot start.";
 "settings.backup.signIn.success" = "Backup account connected.";
 "settings.backup.signIn.failed" = "Apple sign-in failed.";
+"settings.backup.signIn.failed.kakao" = "Kakao sign-in failed.";
+"settings.backup.signIn.cancelled" = "Sign-in was cancelled.";
+"settings.backup.signIn.inProgress" = "Signing in...";
+"settings.backup.signIn.kakao.accessibilityLabel" = "Sign in with Kakao";
 "settings.backup.signIn.restorePrompt" = "Existing backup found. Choose whether to restore it.";
 "settings.backup.signIn.autoBackupDone" = "No existing backup found, so current data was backed up automatically.";
 "settings.backup.signIn.restoreSkipped" = "Skipped restoring existing backup.";

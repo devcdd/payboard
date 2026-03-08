@@ -28,8 +28,13 @@
 "settings.backup.signOut" = "로그아웃";
 "settings.backup.signIn.invalidCredential" = "애플 로그인 자격 정보를 읽지 못했습니다.";
 "settings.backup.signIn.missingNonce" = "로그인 요청이 만료되었습니다. 다시 시도해 주세요.";
+"settings.backup.signIn.redirectNotConfigured" = "로그인 콜백 설정이 없어 로그인을 시작할 수 없습니다.";
 "settings.backup.signIn.success" = "백업 계정 연결이 완료되었습니다.";
 "settings.backup.signIn.failed" = "애플 로그인에 실패했습니다.";
+"settings.backup.signIn.failed.kakao" = "카카오 로그인에 실패했습니다.";
+"settings.backup.signIn.cancelled" = "로그인이 취소되었습니다.";
+"settings.backup.signIn.inProgress" = "로그인 진행 중...";
+"settings.backup.signIn.kakao.accessibilityLabel" = "카카오로 로그인";
 "settings.backup.signIn.restorePrompt" = "기존 백업을 찾았습니다. 복원 여부를 선택해 주세요.";
 "settings.backup.signIn.autoBackupDone" = "초기 1회 백업을 완료하였습니다.";
 "settings.backup.signIn.restoreSkipped" = "기존 백업 복원을 건너뛰었습니다.";
