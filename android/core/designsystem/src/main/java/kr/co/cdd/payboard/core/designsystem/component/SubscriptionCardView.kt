@@ -192,7 +192,7 @@ fun PayBoardIconBadge(
     val presetIcon = remember(iconKey) { PresetIconCatalog.iconFor(iconKey) }
     val iconTint = payIconColor(iconColorKey)
     val backgroundColor = if (presetIcon != null) {
-        Color.Black.copy(alpha = 0.05f)
+        Color.Transparent
     } else {
         iconTint.copy(alpha = 0.14f)
     }
@@ -214,9 +214,7 @@ fun PayBoardIconBadge(
             androidx.compose.foundation.Image(
                 painter = painterResource(presetIcon.drawableResId),
                 contentDescription = presetIcon.displayName,
-                modifier = Modifier
-                    .size(20.dp)
-                    .padding(1.dp),
+                modifier = Modifier.size(28.dp),
                 contentScale = ContentScale.Fit,
             )
         } else {
