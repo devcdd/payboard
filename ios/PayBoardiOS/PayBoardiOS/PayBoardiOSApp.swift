@@ -49,7 +49,7 @@ struct PayBoardiOSApp: App {
                     .tabItem { Label("tab.calendar", systemImage: "calendar") }
                     .tag(AppTab.calendar)
 
-                ArchiveView(viewModel: boardViewModel)
+                ArchiveView(viewModel: boardViewModel, settingsViewModel: settingsViewModel)
                     .tabItem { Label("tab.archive", systemImage: "archivebox") }
                     .tag(AppTab.archive)
 
@@ -59,6 +59,16 @@ struct PayBoardiOSApp: App {
             }
             .preferredColorScheme(settingsViewModel.preferredColorScheme)
             .environment(\.locale, settingsViewModel.preferredLocale)
+            .alert("settings.backup.signIn.restorePrompt.title", isPresented: $settingsViewModel.isShowingRestorePromptAfterSignIn) {
+                Button("settings.backup.signIn.restorePrompt.skip", role: .cancel) {
+                    settingsViewModel.skipRestoreAfterSignIn()
+                }
+                Button("settings.backup.signIn.restorePrompt.restore", role: .destructive) {
+                    Task { await settingsViewModel.confirmRestoreAfterSignIn() }
+                }
+            } message: {
+                Text("settings.backup.signIn.restorePrompt.message")
+            }
         }
     }
 }

@@ -519,6 +519,7 @@ public final class SettingsViewModel: ObservableObject {
         defer { isBackupSyncInProgress = false }
 
         do {
+            let existingSubscriptions = try await fetchAllLocalSubscriptions()
             let session = try await supabaseClient.auth.session
             let metadata = try await fetchLatestBackupMetadata(for: session.user.id, client: supabaseClient)
             guard let latestBackup = metadata else {
@@ -540,6 +541,16 @@ public final class SettingsViewModel: ObservableObject {
 
             try await replaceAllSubscriptions(with: restoredSubscriptions)
             let updated = try await repository.fetchAll()
+            let updatedIDs = Set(updated.map(\.id))
+            for subscription in existingSubscriptions where !updatedIDs.contains(subscription.id) {
+                await scheduler.cancel(for: subscription.id)
+            }
+            try await scheduler.rescheduleAll(
+                subscriptions: updated,
+                reminderDays: effectiveReminderOptions.map(\.rawValue).sorted(by: >),
+                reminderHour: reminderHour,
+                reminderMinute: reminderMinute
+            )
             WidgetSnapshotStore.save(subscriptions: updated)
             backupMessageKey = "settings.backup.restore.success"
             backupErrorDebugText = nil

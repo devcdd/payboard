@@ -200,7 +200,10 @@ public struct BoardView: View {
             ) {
                 Button("common.delete", role: .destructive) {
                     guard let subscription = pendingDeleteSubscription else { return }
-                    Task { await viewModel.delete(subscription) }
+                    Task {
+                        await viewModel.delete(subscription)
+                        await settingsViewModel.autoBackupAfterSubscriptionUpsert()
+                    }
                     pendingDeleteSubscription = nil
                 }
                 Button("common.cancel", role: .cancel) {
@@ -214,6 +217,7 @@ public struct BoardView: View {
                     let ids = pendingBulkDeleteIDs
                     Task {
                         await viewModel.delete(ids: ids)
+                        await settingsViewModel.autoBackupAfterSubscriptionUpsert()
                         await MainActor.run {
                             selectedSubscriptionIDs.removeAll()
                             isSelectionMode = false
@@ -693,6 +697,7 @@ public struct BoardView: View {
                     let ids = selectedSubscriptionIDs
                     Task {
                         await viewModel.markPaymentComplete(ids: ids)
+                        await settingsViewModel.autoBackupAfterSubscriptionUpsert()
                         await MainActor.run {
                             selectedSubscriptionIDs.removeAll()
                             isSelectionMode = false
@@ -705,6 +710,7 @@ public struct BoardView: View {
                     let ids = selectedSubscriptionIDs
                     Task {
                         await viewModel.cancelPaymentComplete(ids: ids)
+                        await settingsViewModel.autoBackupAfterSubscriptionUpsert()
                         await MainActor.run {
                             selectedSubscriptionIDs.removeAll()
                             isSelectionMode = false
@@ -717,6 +723,7 @@ public struct BoardView: View {
                     let ids = selectedSubscriptionIDs
                     Task {
                         await viewModel.archive(ids: ids)
+                        await settingsViewModel.autoBackupAfterSubscriptionUpsert()
                         await MainActor.run {
                             selectedSubscriptionIDs.removeAll()
                             isSelectionMode = false
@@ -758,6 +765,7 @@ public struct BoardView: View {
                         let date = bulkNextBillingDate
                         Task {
                             await viewModel.updateNextBillingDate(ids: ids, to: date)
+                            await settingsViewModel.autoBackupAfterSubscriptionUpsert()
                             await MainActor.run {
                                 isPresentingBulkDateSheet = false
                                 selectedSubscriptionIDs.removeAll()
@@ -1030,16 +1038,28 @@ public struct BoardView: View {
                 editorSheet = .edit(subscription)
             }
             Button(subscription.isPinned ? "board.action.unpin" : "board.action.pin") {
-                Task { await viewModel.setPinned(subscription, isPinned: !subscription.isPinned) }
+                Task {
+                    await viewModel.setPinned(subscription, isPinned: !subscription.isPinned)
+                    await settingsViewModel.autoBackupAfterSubscriptionUpsert()
+                }
             }
             Button("board.action.completePayment") {
-                Task { await viewModel.markPaymentComplete(subscription) }
+                Task {
+                    await viewModel.markPaymentComplete(subscription)
+                    await settingsViewModel.autoBackupAfterSubscriptionUpsert()
+                }
             }
             Button("board.action.cancelPayment") {
-                Task { await viewModel.cancelPaymentComplete(subscription) }
+                Task {
+                    await viewModel.cancelPaymentComplete(subscription)
+                    await settingsViewModel.autoBackupAfterSubscriptionUpsert()
+                }
             }
             Button("board.action.archive") {
-                Task { await viewModel.archive(subscription) }
+                Task {
+                    await viewModel.archive(subscription)
+                    await settingsViewModel.autoBackupAfterSubscriptionUpsert()
+                }
             }
             Button("common.delete", role: .destructive) {
                 pendingDeleteSubscription = subscription

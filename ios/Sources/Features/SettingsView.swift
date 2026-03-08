@@ -258,16 +258,6 @@ public struct SettingsView: View {
             } message: {
                 Text(viewModel.deleteAccountConfirmationMessage)
             }
-            .alert("settings.backup.signIn.restorePrompt.title", isPresented: $viewModel.isShowingRestorePromptAfterSignIn) {
-                Button("settings.backup.signIn.restorePrompt.skip", role: .cancel) {
-                    viewModel.skipRestoreAfterSignIn()
-                }
-                Button("settings.backup.signIn.restorePrompt.restore", role: .destructive) {
-                    Task { await viewModel.confirmRestoreAfterSignIn() }
-                }
-            } message: {
-                Text("settings.backup.signIn.restorePrompt.message")
-            }
             .task {
                 await viewModel.refreshPushPermissionState()
             }

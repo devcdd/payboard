@@ -5,9 +5,11 @@ import DesignSystem
 
 public struct ArchiveView: View {
     @ObservedObject var viewModel: BoardViewModel
+    @ObservedObject var settingsViewModel: SettingsViewModel
 
-    public init(viewModel: BoardViewModel) {
+    public init(viewModel: BoardViewModel, settingsViewModel: SettingsViewModel) {
         self.viewModel = viewModel
+        self.settingsViewModel = settingsViewModel
     }
 
     public var body: some View {
@@ -34,14 +36,20 @@ public struct ArchiveView: View {
                                 Spacer()
 
                                 Button("archive.action.restore") {
-                                    Task { await viewModel.restore(subscription) }
+                                    Task {
+                                        await viewModel.restore(subscription)
+                                        await settingsViewModel.autoBackupAfterSubscriptionUpsert()
+                                    }
                                 }
                                 .buttonStyle(.borderedProminent)
                                 .controlSize(.small)
                             }
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                 Button("common.delete", role: .destructive) {
-                                    Task { await viewModel.delete(subscription) }
+                                    Task {
+                                        await viewModel.delete(subscription)
+                                        await settingsViewModel.autoBackupAfterSubscriptionUpsert()
+                                    }
                                 }
                             }
                         }
