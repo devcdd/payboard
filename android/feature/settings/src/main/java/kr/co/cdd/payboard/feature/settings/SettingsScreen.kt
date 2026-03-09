@@ -1,6 +1,9 @@
 package kr.co.cdd.payboard.feature.settings
 
 import android.app.TimePickerDialog
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -415,13 +418,24 @@ fun SettingsScreen(
                     )
                 }
 
-                backupAuthState.debugText?.let { debugText ->
-                    Text(
-                        text = debugText,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+            }
+        }
+
+        item {
+            PreferenceGroup(title = strings.contact) {
+                SettingActionRow(
+                    label = strings.contactEmail,
+                    onClick = { openSupportEmail(context) },
+                )
+                SettingActionRow(
+                    label = strings.contactInstagram,
+                    onClick = { openInstagram(context) },
+                )
+                Text(
+                    text = strings.contactCaption,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }
@@ -524,6 +538,30 @@ private fun formatBackupTimestamp(
     return formatter.format(instant)
 }
 
+private fun openSupportEmail(context: Context) {
+    openExternalIntent(
+        context = context,
+        intent = Intent(Intent.ACTION_SENDTO, Uri.parse(SUPPORT_EMAIL_URI)),
+    )
+}
+
+private fun openInstagram(context: Context) {
+    openExternalIntent(
+        context = context,
+        intent = Intent(Intent.ACTION_VIEW, Uri.parse(INSTAGRAM_URI)),
+    )
+}
+
+private fun openExternalIntent(
+    context: Context,
+    intent: Intent,
+) {
+    val launchIntent = intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    if (launchIntent.resolveActivity(context.packageManager) != null) {
+        context.startActivity(launchIntent)
+    }
+}
+
 @Composable
 private fun PreferenceGroup(
     title: String,
@@ -585,3 +623,6 @@ private fun SettingActionRow(
         Spacer(modifier = Modifier.weight(1f))
     }
 }
+
+private const val SUPPORT_EMAIL_URI = "mailto:developer.cdd@gmail.com"
+private const val INSTAGRAM_URI = "https://www.instagram.com/payboard.app/"

@@ -609,6 +609,22 @@ class PayBoardStrings(
         AppLanguage.KOREAN -> "계정 삭제"
         AppLanguage.ENGLISH -> "Delete account"
     }
+    val contact: String = when (language) {
+        AppLanguage.KOREAN -> "문의"
+        AppLanguage.ENGLISH -> "Contact"
+    }
+    val contactEmail: String = when (language) {
+        AppLanguage.KOREAN -> "이메일 문의"
+        AppLanguage.ENGLISH -> "Email Support"
+    }
+    val contactInstagram: String = when (language) {
+        AppLanguage.KOREAN -> "인스타그램"
+        AppLanguage.ENGLISH -> "Instagram"
+    }
+    val contactCaption: String = when (language) {
+        AppLanguage.KOREAN -> "문의/피드백은 이메일 또는 인스타그램으로 보내주세요."
+        AppLanguage.ENGLISH -> "Send feedback or inquiries via email or Instagram."
+    }
     val deleteSingle: String = when (language) {
         AppLanguage.KOREAN -> "삭제"
         AppLanguage.ENGLISH -> "Delete"
