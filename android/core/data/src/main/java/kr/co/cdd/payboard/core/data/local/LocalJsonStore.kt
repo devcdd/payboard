@@ -24,7 +24,7 @@ internal class LocalJsonStore(
 
     fun load(): List<Subscription> {
         if (!file.exists()) {
-            return SampleSubscriptions.initial()
+            return emptyList()
         }
         return json.decodeFromString<List<SubscriptionRecord>>(file.readText())
             .map(SubscriptionRecord::toDomain)
