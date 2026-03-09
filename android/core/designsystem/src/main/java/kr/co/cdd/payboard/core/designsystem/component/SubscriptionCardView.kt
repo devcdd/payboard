@@ -127,13 +127,27 @@ fun SubscriptionCardView(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
-                    Text(
-                        text = subscription.name,
-                        style = layout.titleStyle,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = subscription.name,
+                            style = layout.titleStyle,
+                            modifier = Modifier.weight(1f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        if (trailingContent != null) {
+                            trailingContent()
+                        }
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         Text(
                             text = subscription.customCategoryName?.takeIf { subscription.category.name == "OTHER" }
                                 ?: strings.categoryLabel(subscription.category),
@@ -154,10 +168,6 @@ fun SubscriptionCardView(
                             )
                         }
                     }
-                }
-
-                if (trailingContent != null) {
-                    trailingContent()
                 }
             }
 

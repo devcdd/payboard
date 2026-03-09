@@ -1359,11 +1359,12 @@ private fun BoardCardActionMenuButton(
     Box {
         IconButton(
             onClick = { onExpandChange(true) },
-            modifier = Modifier.size(if (isCompact) 32.dp else 36.dp),
+            modifier = Modifier.size(if (isCompact) 28.dp else 36.dp),
         ) {
             Icon(
                 imageVector = Icons.Default.MoreHoriz,
                 contentDescription = strings.cardActions,
+                modifier = Modifier.size(if (isCompact) 16.dp else 20.dp),
             )
         }
         DropdownMenu(
