@@ -89,6 +89,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -1263,6 +1264,7 @@ private fun BoardCard(
             SubscriptionCardView(
                 subscription = item.subscription,
                 size = boardCardSize(columnsCount),
+                contentEndInset = boardCardActionInset(columnsCount),
                 showIcon = columnsCount != 3,
                 showDateBelowLabel = columnsCount == 3,
                 referenceMonth = referenceMonth,
@@ -1371,6 +1373,7 @@ private fun BoardDragPreviewCard(
     SubscriptionCardView(
         subscription = item.subscription,
         size = boardCardSize(columnsCount),
+        contentEndInset = boardCardActionInset(columnsCount),
         showIcon = columnsCount != 3,
         showDateBelowLabel = columnsCount == 3,
         referenceMonth = referenceMonth,
@@ -2926,6 +2929,12 @@ private fun boardCardSize(columnsCount: Int): SubscriptionCardSize = when (colum
     3 -> SubscriptionCardSize.COMPACT
     2 -> SubscriptionCardSize.COMFORTABLE
     else -> SubscriptionCardSize.EXPANDED
+}
+
+private fun boardCardActionInset(columnsCount: Int): Dp = when (columnsCount.coerceIn(1, 3)) {
+    2 -> 36.dp
+    1 -> 32.dp
+    else -> 0.dp
 }
 
 private data class BoardPreviewPlacement(

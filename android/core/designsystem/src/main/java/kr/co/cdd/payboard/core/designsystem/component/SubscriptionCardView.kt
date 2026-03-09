@@ -53,6 +53,7 @@ fun SubscriptionCardView(
     subscription: Subscription,
     modifier: Modifier = Modifier,
     size: SubscriptionCardSize = SubscriptionCardSize.EXPANDED,
+    contentEndInset: Dp = 0.dp,
     showIcon: Boolean = true,
     showDateBelowLabel: Boolean = false,
     referenceMonth: Instant = Instant.now(),
@@ -99,7 +100,12 @@ fun SubscriptionCardView(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(layout.contentPadding),
+                .padding(
+                    start = layout.contentPadding,
+                    top = layout.contentPadding,
+                    end = layout.contentPadding + contentEndInset,
+                    bottom = layout.contentPadding,
+                ),
             verticalArrangement = Arrangement.spacedBy(layout.verticalSpacing),
         ) {
             Row(
@@ -291,8 +297,8 @@ private fun rememberSubscriptionCardLayout(size: SubscriptionCardSize): Subscrip
                 iconBadgeSize = 34.dp,
                 iconContentSize = 25.dp,
                 titleStyle = typography.titleMedium.copy(
-                    fontSize = 15.sp,
-                    lineHeight = 20.sp,
+                    fontSize = 14.sp,
+                    lineHeight = 18.sp,
                 ),
                 amountStyle = typography.titleLarge.copy(
                     fontSize = 18.sp,
