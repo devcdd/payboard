@@ -1,0 +1,24 @@
+# Swift Package Manager
+.build
+Packages
+.swiftpm/
+.swiftpm/configuration/registries.json
+.swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
+
+# Xcode user/local state
+DerivedData/
+xcuserdata/
+*.xcuserstate
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+
+# iOS local secrets
+Configs/Secrets.xcconfig
+Secrets.xcconfig
+Secrets 2.xcconfig
+Payboard.xcconfig
+PayboardConfig.xcconfig
+cert/
+*.p8
+*.cer
+*.pem
