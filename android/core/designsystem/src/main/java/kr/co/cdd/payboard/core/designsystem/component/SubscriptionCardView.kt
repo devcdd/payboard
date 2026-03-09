@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -75,7 +76,13 @@ fun SubscriptionCardView(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = layout.minHeight)
+            .then(
+                if (layout.fixedHeight != null) {
+                    Modifier.height(layout.fixedHeight)
+                } else {
+                    Modifier.heightIn(min = layout.minHeight)
+                }
+            )
             .clip(PayBoardShapes.Card)
             .background(cardBackground, PayBoardShapes.Card)
             .then(
@@ -298,8 +305,9 @@ private fun rememberSubscriptionCardLayout(size: SubscriptionCardSize): Subscrip
             )
             SubscriptionCardSize.COMPACT -> SubscriptionCardLayout(
                 minHeight = 112.dp,
-                contentPadding = 10.dp,
-                verticalSpacing = 6.dp,
+                fixedHeight = 112.dp,
+                contentPadding = 9.dp,
+                verticalSpacing = 5.dp,
                 topRowSpacing = 6.dp,
                 iconBadgeSize = 30.dp,
                 iconContentSize = 22.dp,
@@ -322,6 +330,7 @@ private fun rememberSubscriptionCardLayout(size: SubscriptionCardSize): Subscrip
 
 private data class SubscriptionCardLayout(
     val minHeight: Dp,
+    val fixedHeight: Dp? = null,
     val contentPadding: Dp,
     val verticalSpacing: Dp,
     val topRowSpacing: Dp,
