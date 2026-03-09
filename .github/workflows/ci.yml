@@ -53,4 +53,21 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Build
-        run: ./gradlew build
+        run: |
+          for attempt in 1 2 3; do
+            if [ "$attempt" -gt 1 ]; then
+              echo "Retrying Android build after transient dependency failure..."
+              if ./gradlew build --stacktrace --refresh-dependencies; then
+                exit 0
+              fi
+            else
+              if ./gradlew build --stacktrace; then
+                exit 0
+              fi
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "Android build failed on attempt $attempt. Waiting before retry..."
+              sleep 20
+            fi
+          done
+          exit 1
