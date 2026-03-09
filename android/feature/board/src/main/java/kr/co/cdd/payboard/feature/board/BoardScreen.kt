@@ -1245,6 +1245,8 @@ private fun BoardCard(
 ) {
     val strings = LocalPayBoardStrings.current
     var menuExpanded by remember(item.subscription.id) { mutableStateOf(false) }
+    val showInlineActionMenu = !isSelectionMode && !isCustomSortEditing && columnsCount == 2
+    val showOverlayActionMenu = !isSelectionMode && columnsCount == 1
 
     Box {
         Box(
@@ -1264,12 +1266,33 @@ private fun BoardCard(
             SubscriptionCardView(
                 subscription = item.subscription,
                 size = boardCardSize(columnsCount),
-                contentEndInset = boardCardActionInset(columnsCount),
+                contentEndInset = if (showOverlayActionMenu) boardCardActionInset(columnsCount) else 0.dp,
+                pinnedIndicatorEndInset = if (showInlineActionMenu) boardCardPinnedInset(columnsCount) else 0.dp,
                 showIcon = columnsCount != 3,
                 showDateBelowLabel = columnsCount == 3,
                 referenceMonth = referenceMonth,
                 billingDateOverride = item.effectiveBillingDate,
                 onTapIcon = if (isSelectionMode || isCustomSortEditing) null else onChangeIcon,
+                trailingContent = if (showInlineActionMenu) {
+                    {
+                        BoardCardActionMenuButton(
+                            expanded = menuExpanded,
+                            strings = strings,
+                            isCompact = true,
+                            onExpandChange = { menuExpanded = it },
+                            onEdit = onEdit,
+                            onTogglePinned = onTogglePinned,
+                            onChangeIcon = onChangeIcon,
+                            onMarkPaymentComplete = onMarkPaymentComplete,
+                            onCancelPaymentComplete = onCancelPaymentComplete,
+                            onArchive = onArchive,
+                            onDelete = onDelete,
+                            isPinned = item.subscription.isPinned,
+                        )
+                    }
+                } else {
+                    null
+                },
                 modifier = Modifier.then(
                     if (isDropTarget) {
                         Modifier.border(
@@ -1293,73 +1316,109 @@ private fun BoardCard(
                     .align(Alignment.TopEnd)
                     .padding(8.dp),
             )
-        } else if (columnsCount != 3) {
+        } else if (showOverlayActionMenu) {
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(6.dp),
             ) {
-                IconButton(onClick = { menuExpanded = true }) {
-                    Icon(
-                        imageVector = Icons.Default.MoreHoriz,
-                        contentDescription = strings.cardActions,
-                    )
-                }
-                DropdownMenu(
+                BoardCardActionMenuButton(
                     expanded = menuExpanded,
-                    onDismissRequest = { menuExpanded = false },
-                ) {
-                    DropdownMenuItem(
-                        text = { Text(strings.editSubscription) },
-                        onClick = {
-                            menuExpanded = false
-                            onEdit()
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(if (item.subscription.isPinned) strings.unpin else strings.pin) },
-                        onClick = {
-                            menuExpanded = false
-                            onTogglePinned()
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(strings.changeIcon) },
-                        onClick = {
-                            menuExpanded = false
-                            onChangeIcon()
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(strings.markAsPaid) },
-                        onClick = {
-                            menuExpanded = false
-                            onMarkPaymentComplete()
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(strings.cancelPayment) },
-                        onClick = {
-                            menuExpanded = false
-                            onCancelPaymentComplete()
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(strings.archive) },
-                        onClick = {
-                            menuExpanded = false
-                            onArchive()
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(strings.deleteSingle) },
-                        onClick = {
-                            menuExpanded = false
-                            onDelete()
-                        },
-                    )
-                }
+                    strings = strings,
+                    isCompact = false,
+                    onExpandChange = { menuExpanded = it },
+                    onEdit = onEdit,
+                    onTogglePinned = onTogglePinned,
+                    onChangeIcon = onChangeIcon,
+                    onMarkPaymentComplete = onMarkPaymentComplete,
+                    onCancelPaymentComplete = onCancelPaymentComplete,
+                    onArchive = onArchive,
+                    onDelete = onDelete,
+                    isPinned = item.subscription.isPinned,
+                )
             }
+        }
+    }
+}
+
+@Composable
+private fun BoardCardActionMenuButton(
+    expanded: Boolean,
+    strings: PayBoardStrings,
+    isCompact: Boolean,
+    onExpandChange: (Boolean) -> Unit,
+    onEdit: () -> Unit,
+    onTogglePinned: () -> Unit,
+    onChangeIcon: () -> Unit,
+    onMarkPaymentComplete: () -> Unit,
+    onCancelPaymentComplete: () -> Unit,
+    onArchive: () -> Unit,
+    onDelete: () -> Unit,
+    isPinned: Boolean,
+) {
+    Box {
+        IconButton(
+            onClick = { onExpandChange(true) },
+            modifier = Modifier.size(if (isCompact) 32.dp else 36.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Default.MoreHoriz,
+                contentDescription = strings.cardActions,
+            )
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { onExpandChange(false) },
+        ) {
+            DropdownMenuItem(
+                text = { Text(strings.editSubscription) },
+                onClick = {
+                    onExpandChange(false)
+                    onEdit()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(if (isPinned) strings.unpin else strings.pin) },
+                onClick = {
+                    onExpandChange(false)
+                    onTogglePinned()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(strings.changeIcon) },
+                onClick = {
+                    onExpandChange(false)
+                    onChangeIcon()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(strings.markAsPaid) },
+                onClick = {
+                    onExpandChange(false)
+                    onMarkPaymentComplete()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(strings.cancelPayment) },
+                onClick = {
+                    onExpandChange(false)
+                    onCancelPaymentComplete()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(strings.archive) },
+                onClick = {
+                    onExpandChange(false)
+                    onArchive()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text(strings.deleteSingle) },
+                onClick = {
+                    onExpandChange(false)
+                    onDelete()
+                },
+            )
         }
     }
 }
@@ -2932,8 +2991,12 @@ private fun boardCardSize(columnsCount: Int): SubscriptionCardSize = when (colum
 }
 
 private fun boardCardActionInset(columnsCount: Int): Dp = when (columnsCount.coerceIn(1, 3)) {
-    2 -> 36.dp
     1 -> 32.dp
+    else -> 0.dp
+}
+
+private fun boardCardPinnedInset(columnsCount: Int): Dp = when (columnsCount.coerceIn(1, 3)) {
+    2 -> 34.dp
     else -> 0.dp
 }
 

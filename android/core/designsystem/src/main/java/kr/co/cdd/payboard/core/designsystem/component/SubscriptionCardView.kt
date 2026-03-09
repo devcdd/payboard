@@ -54,6 +54,7 @@ fun SubscriptionCardView(
     modifier: Modifier = Modifier,
     size: SubscriptionCardSize = SubscriptionCardSize.EXPANDED,
     contentEndInset: Dp = 0.dp,
+    pinnedIndicatorEndInset: Dp = 0.dp,
     showIcon: Boolean = true,
     showDateBelowLabel: Boolean = false,
     referenceMonth: Instant = Instant.now(),
@@ -213,7 +214,10 @@ fun SubscriptionCardView(
         Box(
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .padding(top = 12.dp, end = 12.dp)
+                .padding(
+                    top = layout.contentPadding,
+                    end = layout.contentPadding + pinnedIndicatorEndInset,
+                )
         ) {
             if (subscription.isPinned) {
                 Box(
@@ -291,9 +295,9 @@ private fun rememberSubscriptionCardLayout(size: SubscriptionCardSize): Subscrip
             )
             SubscriptionCardSize.COMFORTABLE -> SubscriptionCardLayout(
                 minHeight = 122.dp,
-                contentPadding = 11.dp,
-                verticalSpacing = 7.dp,
-                topRowSpacing = 8.dp,
+                contentPadding = 10.dp,
+                verticalSpacing = 6.dp,
+                topRowSpacing = 7.dp,
                 iconBadgeSize = 34.dp,
                 iconContentSize = 25.dp,
                 titleStyle = typography.titleMedium.copy(
