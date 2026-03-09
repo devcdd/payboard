@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -26,8 +27,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -97,72 +100,142 @@ fun SubscriptionCardView(
                     Modifier
                 }
             ),
+        propagateMinConstraints = layout.pinFooterToBottom,
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .fillMaxHeight()
                 .padding(
                     start = layout.contentPadding,
                     top = layout.contentPadding,
-                    end = layout.contentPadding + contentEndInset,
-                    bottom = layout.contentPadding,
+                    end = layout.contentPadding,
+                    bottom = layout.contentBottomPadding,
                 ),
-            verticalArrangement = Arrangement.spacedBy(layout.verticalSpacing),
+            verticalArrangement = if (layout.pinFooterToBottom) {
+                Arrangement.SpaceBetween
+            } else {
+                Arrangement.spacedBy(layout.verticalSpacing)
+            },
         ) {
-            Row(
-                verticalAlignment = Alignment.Top,
-                horizontalArrangement = Arrangement.spacedBy(layout.topRowSpacing),
-            ) {
-                if (showIcon) {
-                    PayBoardIconBadge(
-                        iconKey = subscription.iconKey,
-                        iconColorKey = subscription.iconColorKey,
-                        modifier = Modifier.size(layout.iconBadgeSize),
-                        contentSize = layout.iconContentSize,
-                        onClick = onTapIcon,
-                    )
-                }
-
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
+            val headerContent: @Composable () -> Unit = {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(end = contentEndInset),
+                    verticalAlignment = Alignment.Top,
+                    horizontalArrangement = Arrangement.spacedBy(layout.topRowSpacing),
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = subscription.name,
-                            style = layout.titleStyle,
-                            modifier = Modifier.weight(1f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                    if (showIcon) {
+                        PayBoardIconBadge(
+                            iconKey = subscription.iconKey,
+                            iconColorKey = subscription.iconColorKey,
+                            modifier = Modifier.size(layout.iconBadgeSize),
+                            contentSize = layout.iconContentSize,
+                            onClick = onTapIcon,
                         )
-                        if (trailingContent != null) {
-                            trailingContent()
+                    }
+
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(layout.headerTextSpacing),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = subscription.name,
+                                style = layout.titleStyle,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            if (trailingContent != null) {
+                                trailingContent()
+                            }
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = subscription.customCategoryName?.takeIf { subscription.category.name == "OTHER" }
+                                    ?: strings.categoryLabel(subscription.category),
+                                style = layout.metaStyle,
+                                color = payMuted(),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            if (subscription.isAutoPayEnabled) {
+                                Text(text = "·", style = layout.metaStyle, color = payMuted())
+                                Text(
+                                    text = strings.autoPay,
+                                    style = layout.metaStyle,
+                                    color = ColorTokens.Success,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
                         }
                     }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = subscription.customCategoryName?.takeIf { subscription.category.name == "OTHER" }
-                                ?: strings.categoryLabel(subscription.category),
-                            style = layout.metaStyle,
-                            color = payMuted(),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        if (subscription.isAutoPayEnabled) {
-                            Text(text = "·", color = payMuted())
+                }
+            }
+
+            val footerContent: @Composable () -> Unit = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(layout.footerSpacing),
+                ) {
+                    Text(
+                        text = strings.formatCurrency(
+                            amount = subscription.amount,
+                            currencyCode = subscription.currencyCode,
+                            isAmountUndecided = subscription.isAmountUndecided,
+                        ),
+                        style = layout.amountStyle,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+
+                    if (showDateBelowLabel) {
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(
-                                text = strings.autoPay,
+                                text = if (isPaidForReferenceMonth) strings.paymentStatus else strings.nextBilling,
                                 style = layout.metaStyle,
-                                color = ColorTokens.Success,
-                                fontWeight = FontWeight.SemiBold,
+                                color = payMuted(),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = if (isPaidForReferenceMonth) strings.paymentDone else strings.formatShortDate(effectiveBillingDate),
+                                style = layout.metaStyle,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = if (isPaidForReferenceMonth) strings.paymentStatus else strings.nextBilling,
+                                style = layout.metaStyle,
+                                color = payMuted(),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Spacer(modifier = Modifier.weight(1f))
+                            Text(
+                                text = if (isPaidForReferenceMonth) strings.paymentDone else strings.formatShortDate(effectiveBillingDate),
+                                style = layout.metaStyle,
+                                fontWeight = FontWeight.Medium,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
@@ -171,54 +244,8 @@ fun SubscriptionCardView(
                 }
             }
 
-            Text(
-                text = strings.formatCurrency(
-                    amount = subscription.amount,
-                    currencyCode = subscription.currencyCode,
-                    isAmountUndecided = subscription.isAmountUndecided,
-                ),
-                style = layout.amountStyle,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-
-            if (showDateBelowLabel) {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        text = if (isPaidForReferenceMonth) strings.paymentStatus else strings.nextBilling,
-                        style = layout.metaStyle,
-                        color = payMuted(),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = if (isPaidForReferenceMonth) strings.paymentDone else strings.formatShortDate(effectiveBillingDate),
-                        style = layout.metaStyle,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            } else {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = if (isPaidForReferenceMonth) strings.paymentStatus else strings.nextBilling,
-                        style = layout.metaStyle,
-                        color = payMuted(),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Spacer(modifier = Modifier.weight(1f))
-                    Text(
-                        text = if (isPaidForReferenceMonth) strings.paymentDone else strings.formatShortDate(effectiveBillingDate),
-                        style = layout.metaStyle,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
+            headerContent()
+            footerContent()
         }
 
         Box(
@@ -293,10 +320,13 @@ private fun rememberSubscriptionCardLayout(size: SubscriptionCardSize): Subscrip
     return remember(size, typography) {
         when (size) {
             SubscriptionCardSize.EXPANDED -> SubscriptionCardLayout(
-                minHeight = 132.dp,
+                minHeight = 128.dp,
                 contentPadding = 12.dp,
                 verticalSpacing = 8.dp,
+                footerSpacing = 5.dp,
                 topRowSpacing = 8.dp,
+                headerTextSpacing = 2.dp,
+                pinFooterToBottom = true,
                 iconBadgeSize = 36.dp,
                 iconContentSize = 28.dp,
                 titleStyle = typography.titleMedium,
@@ -304,23 +334,35 @@ private fun rememberSubscriptionCardLayout(size: SubscriptionCardSize): Subscrip
                 metaStyle = typography.bodySmall,
             )
             SubscriptionCardSize.COMFORTABLE -> SubscriptionCardLayout(
-                minHeight = 122.dp,
+                minHeight = 96.dp,
                 contentPadding = 10.dp,
+                contentBottomPadding = 7.dp,
                 verticalSpacing = 6.dp,
                 topRowSpacing = 7.dp,
-                iconBadgeSize = 34.dp,
-                iconContentSize = 25.dp,
+                headerTextSpacing = 0.dp,
+                iconBadgeSize = 30.dp,
+                iconContentSize = 22.dp,
                 titleStyle = typography.titleMedium.copy(
-                    fontSize = 14.sp,
-                    lineHeight = 18.sp,
+                    fontSize = 13.sp,
+                    lineHeight = 16.sp,
+                    platformStyle = PlatformTextStyle(includeFontPadding = false),
+                    lineHeightStyle = LineHeightStyle(
+                        alignment = LineHeightStyle.Alignment.Proportional,
+                        trim = LineHeightStyle.Trim.Both,
+                    ),
                 ),
                 amountStyle = typography.titleLarge.copy(
                     fontSize = 18.sp,
                     lineHeight = 23.sp,
                 ),
                 metaStyle = typography.bodySmall.copy(
-                    fontSize = 11.sp,
-                    lineHeight = 14.sp,
+                    fontSize = 10.sp,
+                    lineHeight = 13.sp,
+                    platformStyle = PlatformTextStyle(includeFontPadding = false),
+                    lineHeightStyle = LineHeightStyle(
+                        alignment = LineHeightStyle.Alignment.Proportional,
+                        trim = LineHeightStyle.Trim.Both,
+                    ),
                 ),
             )
             SubscriptionCardSize.COMPACT -> SubscriptionCardLayout(
@@ -329,6 +371,7 @@ private fun rememberSubscriptionCardLayout(size: SubscriptionCardSize): Subscrip
                 contentPadding = 9.dp,
                 verticalSpacing = 5.dp,
                 topRowSpacing = 6.dp,
+                headerTextSpacing = 2.dp,
                 iconBadgeSize = 30.dp,
                 iconContentSize = 22.dp,
                 titleStyle = typography.titleMedium.copy(
@@ -352,8 +395,12 @@ private data class SubscriptionCardLayout(
     val minHeight: Dp,
     val fixedHeight: Dp? = null,
     val contentPadding: Dp,
+    val contentBottomPadding: Dp = contentPadding,
     val verticalSpacing: Dp,
+    val footerSpacing: Dp = verticalSpacing,
     val topRowSpacing: Dp,
+    val headerTextSpacing: Dp,
+    val pinFooterToBottom: Boolean = false,
     val iconBadgeSize: Dp,
     val iconContentSize: Dp,
     val titleStyle: TextStyle,

@@ -1357,15 +1357,31 @@ private fun BoardCardActionMenuButton(
     isPinned: Boolean,
 ) {
     Box {
-        IconButton(
-            onClick = { onExpandChange(true) },
-            modifier = Modifier.size(if (isCompact) 28.dp else 36.dp),
-        ) {
-            Icon(
-                imageVector = Icons.Default.MoreHoriz,
-                contentDescription = strings.cardActions,
-                modifier = Modifier.size(if (isCompact) 16.dp else 20.dp),
-            )
+        if (isCompact) {
+            Box(
+                modifier = Modifier
+                    .size(18.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = { onExpandChange(true) }),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Default.MoreHoriz,
+                    contentDescription = strings.cardActions,
+                    modifier = Modifier.size(14.dp),
+                )
+            }
+        } else {
+            IconButton(
+                onClick = { onExpandChange(true) },
+                modifier = Modifier.size(36.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Default.MoreHoriz,
+                    contentDescription = strings.cardActions,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
         }
         DropdownMenu(
             expanded = expanded,
@@ -2997,7 +3013,7 @@ private fun boardCardActionInset(columnsCount: Int): Dp = when (columnsCount.coe
 }
 
 private fun boardCardPinnedInset(columnsCount: Int): Dp = when (columnsCount.coerceIn(1, 3)) {
-    2 -> 34.dp
+    2 -> 22.dp
     else -> 0.dp
 }
 
