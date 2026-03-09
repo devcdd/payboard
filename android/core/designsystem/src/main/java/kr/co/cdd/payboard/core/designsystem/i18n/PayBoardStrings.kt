@@ -625,6 +625,10 @@ class PayBoardStrings(
         AppLanguage.KOREAN -> "문의/피드백은 이메일 또는 인스타그램으로 보내주세요."
         AppLanguage.ENGLISH -> "Send feedback or inquiries via email or Instagram."
     }
+    val contactOpenUnavailable: String = when (language) {
+        AppLanguage.KOREAN -> "연결할 앱을 열 수 없습니다."
+        AppLanguage.ENGLISH -> "Couldn't open a supporting app."
+    }
     val deleteSingle: String = when (language) {
         AppLanguage.KOREAN -> "삭제"
         AppLanguage.ENGLISH -> "Delete"

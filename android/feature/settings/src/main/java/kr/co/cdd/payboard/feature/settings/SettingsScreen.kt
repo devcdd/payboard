@@ -1,10 +1,12 @@
 package kr.co.cdd.payboard.feature.settings
 
 import android.app.TimePickerDialog
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -425,11 +427,11 @@ fun SettingsScreen(
             PreferenceGroup(title = strings.contact) {
                 SettingActionRow(
                     label = strings.contactEmail,
-                    onClick = { openSupportEmail(context) },
+                    onClick = { openSupportEmail(context, strings.contactOpenUnavailable) },
                 )
                 SettingActionRow(
                     label = strings.contactInstagram,
-                    onClick = { openInstagram(context) },
+                    onClick = { openInstagram(context, strings.contactOpenUnavailable) },
                 )
                 Text(
                     text = strings.contactCaption,
@@ -538,27 +540,32 @@ private fun formatBackupTimestamp(
     return formatter.format(instant)
 }
 
-private fun openSupportEmail(context: Context) {
+private fun openSupportEmail(context: Context, failureMessage: String) {
     openExternalIntent(
         context = context,
         intent = Intent(Intent.ACTION_SENDTO, Uri.parse(SUPPORT_EMAIL_URI)),
+        failureMessage = failureMessage,
     )
 }
 
-private fun openInstagram(context: Context) {
+private fun openInstagram(context: Context, failureMessage: String) {
     openExternalIntent(
         context = context,
         intent = Intent(Intent.ACTION_VIEW, Uri.parse(INSTAGRAM_URI)),
+        failureMessage = failureMessage,
     )
 }
 
 private fun openExternalIntent(
     context: Context,
     intent: Intent,
+    failureMessage: String,
 ) {
     val launchIntent = intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    if (launchIntent.resolveActivity(context.packageManager) != null) {
+    try {
         context.startActivity(launchIntent)
+    } catch (_: ActivityNotFoundException) {
+        Toast.makeText(context, failureMessage, Toast.LENGTH_SHORT).show()
     }
 }
 
