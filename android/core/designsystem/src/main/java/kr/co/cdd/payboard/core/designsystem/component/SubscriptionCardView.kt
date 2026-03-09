@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -24,8 +25,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kr.co.cdd.payboard.core.designsystem.icon.PresetIconCatalog
 import kr.co.cdd.payboard.core.designsystem.i18n.LocalPayBoardStrings
 import kr.co.cdd.payboard.core.designsystem.theme.ColorTokens
@@ -35,11 +40,18 @@ import kr.co.cdd.payboard.core.domain.model.Subscription
 import java.time.Instant
 import java.time.ZoneId
 
+enum class SubscriptionCardSize {
+    EXPANDED,
+    COMFORTABLE,
+    COMPACT,
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SubscriptionCardView(
     subscription: Subscription,
     modifier: Modifier = Modifier,
+    size: SubscriptionCardSize = SubscriptionCardSize.EXPANDED,
     showIcon: Boolean = true,
     showDateBelowLabel: Boolean = false,
     referenceMonth: Instant = Instant.now(),
@@ -50,6 +62,7 @@ fun SubscriptionCardView(
     trailingContent: @Composable (() -> Unit)? = null,
 ) {
     val strings = LocalPayBoardStrings.current
+    val layout = rememberSubscriptionCardLayout(size = size)
     val effectiveBillingDate = billingDateOverride ?: subscription.nextBillingDate
     val isPaidForReferenceMonth = subscription.lastPaymentDate?.isSameMonth(referenceMonth) == true
     val dueInDays = effectiveBillingDate.daysUntil()
@@ -62,6 +75,7 @@ fun SubscriptionCardView(
     Box(
         modifier = modifier
             .fillMaxWidth()
+            .heightIn(min = layout.minHeight)
             .clip(PayBoardShapes.Card)
             .background(cardBackground, PayBoardShapes.Card)
             .then(
@@ -78,15 +92,19 @@ fun SubscriptionCardView(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+                .padding(layout.contentPadding),
+            verticalArrangement = Arrangement.spacedBy(layout.verticalSpacing),
         ) {
-            Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(layout.topRowSpacing),
+            ) {
                 if (showIcon) {
                     PayBoardIconBadge(
                         iconKey = subscription.iconKey,
                         iconColorKey = subscription.iconColorKey,
-                        modifier = Modifier.size(36.dp),
+                        modifier = Modifier.size(layout.iconBadgeSize),
+                        contentSize = layout.iconContentSize,
                         onClick = onTapIcon,
                     )
                 }
@@ -97,24 +115,28 @@ fun SubscriptionCardView(
                 ) {
                     Text(
                         text = subscription.name,
-                        style = MaterialTheme.typography.titleMedium,
+                        style = layout.titleStyle,
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = subscription.customCategoryName?.takeIf { subscription.category.name == "OTHER" }
                                 ?: strings.categoryLabel(subscription.category),
-                            style = MaterialTheme.typography.bodySmall,
+                            style = layout.metaStyle,
                             color = payMuted(),
                             maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                         if (subscription.isAutoPayEnabled) {
                             Text(text = "·", color = payMuted())
                             Text(
                                 text = strings.autoPay,
-                                style = MaterialTheme.typography.bodySmall,
+                                style = layout.metaStyle,
                                 color = ColorTokens.Success,
                                 fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
                         }
                     }
@@ -131,35 +153,45 @@ fun SubscriptionCardView(
                     currencyCode = subscription.currencyCode,
                     isAmountUndecided = subscription.isAmountUndecided,
                 ),
-                style = MaterialTheme.typography.titleLarge,
+                style = layout.amountStyle,
                 fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
 
             if (showDateBelowLabel) {
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
                         text = if (isPaidForReferenceMonth) strings.paymentStatus else strings.nextBilling,
-                        style = MaterialTheme.typography.bodySmall,
+                        style = layout.metaStyle,
                         color = payMuted(),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                     Text(
                         text = if (isPaidForReferenceMonth) strings.paymentDone else strings.formatShortDate(effectiveBillingDate),
-                        style = MaterialTheme.typography.bodySmall,
+                        style = layout.metaStyle,
                         fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = if (isPaidForReferenceMonth) strings.paymentStatus else strings.nextBilling,
-                        style = MaterialTheme.typography.bodySmall,
+                        style = layout.metaStyle,
                         color = payMuted(),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                     Spacer(modifier = Modifier.weight(1f))
                     Text(
                         text = if (isPaidForReferenceMonth) strings.paymentDone else strings.formatShortDate(effectiveBillingDate),
-                        style = MaterialTheme.typography.bodySmall,
+                        style = layout.metaStyle,
                         fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
@@ -187,6 +219,7 @@ fun PayBoardIconBadge(
     iconKey: String,
     iconColorKey: String,
     modifier: Modifier = Modifier,
+    contentSize: Dp = 28.dp,
     onClick: (() -> Unit)? = null,
 ) {
     val presetIcon = remember(iconKey) { PresetIconCatalog.iconFor(iconKey) }
@@ -214,7 +247,7 @@ fun PayBoardIconBadge(
             androidx.compose.foundation.Image(
                 painter = painterResource(presetIcon.drawableResId),
                 contentDescription = presetIcon.displayName,
-                modifier = Modifier.size(28.dp),
+                modifier = Modifier.size(contentSize),
                 contentScale = ContentScale.Fit,
             )
         } else {
@@ -226,6 +259,78 @@ fun PayBoardIconBadge(
         }
     }
 }
+
+@Composable
+private fun rememberSubscriptionCardLayout(size: SubscriptionCardSize): SubscriptionCardLayout {
+    val typography = MaterialTheme.typography
+    return remember(size, typography) {
+        when (size) {
+            SubscriptionCardSize.EXPANDED -> SubscriptionCardLayout(
+                minHeight = 132.dp,
+                contentPadding = 12.dp,
+                verticalSpacing = 8.dp,
+                topRowSpacing = 8.dp,
+                iconBadgeSize = 36.dp,
+                iconContentSize = 28.dp,
+                titleStyle = typography.titleMedium,
+                amountStyle = typography.titleLarge,
+                metaStyle = typography.bodySmall,
+            )
+            SubscriptionCardSize.COMFORTABLE -> SubscriptionCardLayout(
+                minHeight = 122.dp,
+                contentPadding = 11.dp,
+                verticalSpacing = 7.dp,
+                topRowSpacing = 8.dp,
+                iconBadgeSize = 34.dp,
+                iconContentSize = 25.dp,
+                titleStyle = typography.titleMedium.copy(
+                    fontSize = 15.sp,
+                    lineHeight = 20.sp,
+                ),
+                amountStyle = typography.titleLarge.copy(
+                    fontSize = 18.sp,
+                    lineHeight = 23.sp,
+                ),
+                metaStyle = typography.bodySmall.copy(
+                    fontSize = 11.sp,
+                    lineHeight = 14.sp,
+                ),
+            )
+            SubscriptionCardSize.COMPACT -> SubscriptionCardLayout(
+                minHeight = 112.dp,
+                contentPadding = 10.dp,
+                verticalSpacing = 6.dp,
+                topRowSpacing = 6.dp,
+                iconBadgeSize = 30.dp,
+                iconContentSize = 22.dp,
+                titleStyle = typography.titleMedium.copy(
+                    fontSize = 14.sp,
+                    lineHeight = 18.sp,
+                ),
+                amountStyle = typography.titleLarge.copy(
+                    fontSize = 16.sp,
+                    lineHeight = 20.sp,
+                ),
+                metaStyle = typography.bodySmall.copy(
+                    fontSize = 10.sp,
+                    lineHeight = 13.sp,
+                ),
+            )
+        }
+    }
+}
+
+private data class SubscriptionCardLayout(
+    val minHeight: Dp,
+    val contentPadding: Dp,
+    val verticalSpacing: Dp,
+    val topRowSpacing: Dp,
+    val iconBadgeSize: Dp,
+    val iconContentSize: Dp,
+    val titleStyle: TextStyle,
+    val amountStyle: TextStyle,
+    val metaStyle: TextStyle,
+)
 
 @Composable
 private fun payMuted(): Color = if (MaterialTheme.colorScheme.background.luminance() > 0.5f) {

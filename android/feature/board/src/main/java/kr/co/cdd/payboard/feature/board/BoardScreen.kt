@@ -95,6 +95,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kr.co.cdd.payboard.core.designsystem.component.PayBoardPanel
 import kr.co.cdd.payboard.core.designsystem.component.PayBoardIconBadge
 import kr.co.cdd.payboard.core.designsystem.component.SubscriptionCardView
+import kr.co.cdd.payboard.core.designsystem.component.SubscriptionCardSize
 import kr.co.cdd.payboard.core.designsystem.icon.PresetIcon
 import kr.co.cdd.payboard.core.designsystem.icon.PresetIconCatalog
 import kr.co.cdd.payboard.core.designsystem.i18n.LocalPayBoardStrings
@@ -1261,6 +1262,7 @@ private fun BoardCard(
         ) {
             SubscriptionCardView(
                 subscription = item.subscription,
+                size = boardCardSize(columnsCount),
                 showIcon = columnsCount != 3,
                 showDateBelowLabel = columnsCount == 3,
                 referenceMonth = referenceMonth,
@@ -1368,6 +1370,7 @@ private fun BoardDragPreviewCard(
 ) {
     SubscriptionCardView(
         subscription = item.subscription,
+        size = boardCardSize(columnsCount),
         showIcon = columnsCount != 3,
         showDateBelowLabel = columnsCount == 3,
         referenceMonth = referenceMonth,
@@ -2917,6 +2920,12 @@ private fun <T> MutableList<T>.move(fromIndex: Int, toIndex: Int) {
     if (fromIndex == toIndex) return
     val item = removeAt(fromIndex)
     add(toIndex, item)
+}
+
+private fun boardCardSize(columnsCount: Int): SubscriptionCardSize = when (columnsCount.coerceIn(1, 3)) {
+    3 -> SubscriptionCardSize.COMPACT
+    2 -> SubscriptionCardSize.COMFORTABLE
+    else -> SubscriptionCardSize.EXPANDED
 }
 
 private data class BoardPreviewPlacement(
