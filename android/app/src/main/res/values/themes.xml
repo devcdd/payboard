@@ -2,4 +2,11 @@
 <resources>
 
     <style name="Theme.PayBoard" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <style name="Theme.PayBoard.Starting" parent="Theme.PayBoard">
+        <item name="android:windowBackground">@color/black</item>
+        <item name="windowSplashScreenBackground">@color/black</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splashscreen_icon</item>
+        <item name="postSplashScreenTheme">@style/Theme.PayBoard</item>
+    </style>
 </resources>
