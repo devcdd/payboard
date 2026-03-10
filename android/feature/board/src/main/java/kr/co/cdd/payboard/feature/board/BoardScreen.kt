@@ -81,6 +81,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -636,10 +637,14 @@ fun BoardScreen(
                     .align(Alignment.BottomEnd)
                     .padding(end = 16.dp, bottom = if (showBulkActionBar) 96.dp else 16.dp),
                 containerColor = ColorTokens.Accent,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
+                contentColor = Color.White,
                 shape = CircleShape,
             ) {
-                Icon(Icons.Default.Add, contentDescription = strings.addSubscription)
+                Icon(
+                    Icons.Default.Add,
+                    contentDescription = strings.addSubscription,
+                    tint = Color.White,
+                )
             }
         }
 
