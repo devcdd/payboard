@@ -484,6 +484,10 @@ public struct ServiceEditorView: View {
                 apply(drafts[0])
                 // 금액을 말하지 않았을 뿐이면 변동으로 두지 않고 사용자가 입력하게 한다.
                 isAmountUndecided = only.isAmountVariable
+                // 바로 저장하는 일괄 추가와 달리 사용자가 저장하므로 지난 결제일을 그대로 두고 저장 시 확인한다.
+                if let date = only.currentPeriodBillingDate() {
+                    nextBillingDate = date
+                }
                 isPresentingAIInput = false
             } else if drafts.isEmpty {
                 aiInputFailed = true

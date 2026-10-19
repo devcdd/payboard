@@ -67,6 +67,18 @@ extension SubscriptionDraft {
 }
 
 @available(iOS 26, macOS 26, *)
+extension SubscriptionDraft {
+    /// 이번 달(연간이면 올해) 안의 결제일. 이미 지났을 수 있어 저장 시 결제 완료 여부를 묻게 된다.
+    func currentPeriodBillingDate(now: Date = .now, calendar: Calendar = .current) -> Date? {
+        guard let billingDay else { return nil }
+        let isYearly = cycle == .yearly
+        let period: Calendar.Component = isYearly && billingMonth != nil ? .year : .month
+        let start = calendar.dateInterval(of: period, for: now)?.start ?? now
+        return BillingDateCalculator.upcoming(day: billingDay, month: billingMonth, cycle: isYearly ? .yearly : .monthly, from: start, calendar: calendar)
+    }
+}
+
+@available(iOS 26, macOS 26, *)
 enum SubscriptionDraftParser {
     static var isAvailable: Bool {
         SystemLanguageModel.default.isAvailable
