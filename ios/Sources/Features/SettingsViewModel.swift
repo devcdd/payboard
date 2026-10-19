@@ -85,7 +85,6 @@ public final class SettingsViewModel: ObservableObject {
     private static let reminderHourKey = "settings.reminder.hour"
     private static let reminderMinuteKey = "settings.reminder.minute"
     private static let pushNotificationsEnabledKey = "settings.pushNotifications.enabled"
-    private static let boardSearchVisibleKey = "settings.board.searchVisible"
     private static let initialScreenKey = "settings.initialScreen"
     private static let hasRequestedInitialNotificationPermissionKey = "settings.pushNotifications.hasRequestedInitialPermission"
     private static let uploadDebounceInterval: TimeInterval = 0.8
@@ -116,11 +115,6 @@ public final class SettingsViewModel: ObservableObject {
     @Published public var isPushNotificationsEnabled: Bool {
         didSet {
             userDefaults.set(isPushNotificationsEnabled, forKey: Self.pushNotificationsEnabledKey)
-        }
-    }
-    @Published public var isBoardSearchVisible: Bool {
-        didSet {
-            userDefaults.set(isBoardSearchVisible, forKey: Self.boardSearchVisibleKey)
         }
     }
     @Published public var initialScreen: InitialScreen {
@@ -167,7 +161,6 @@ public final class SettingsViewModel: ObservableObject {
         let storedLanguage = userDefaults.string(forKey: Self.languageKey)
         self.appLanguage = AppLanguage(rawValue: storedLanguage ?? "") ?? .korean
         self.isPushNotificationsEnabled = userDefaults.object(forKey: Self.pushNotificationsEnabledKey) as? Bool ?? true
-        self.isBoardSearchVisible = userDefaults.object(forKey: Self.boardSearchVisibleKey) as? Bool ?? true
         let storedInitialScreen = userDefaults.string(forKey: Self.initialScreenKey)
         self.initialScreen = InitialScreen(rawValue: storedInitialScreen ?? "") ?? .board
         let storedHour = userDefaults.object(forKey: Self.reminderHourKey) as? Int ?? 9

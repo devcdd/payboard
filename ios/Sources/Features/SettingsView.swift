@@ -192,13 +192,6 @@ public struct SettingsView: View {
                     Text("settings.initialScreen.caption")
                         .font(.caption)
                         .foregroundStyle(Color.payMuted)
-
-                    Divider()
-
-                    Toggle("settings.board.searchVisible", isOn: $viewModel.isBoardSearchVisible)
-                    Text("settings.board.searchVisible.caption")
-                        .font(.caption)
-                        .foregroundStyle(Color.payMuted)
                 }
 
                 Section("settings.section.contact") {

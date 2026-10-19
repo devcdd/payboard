@@ -80,8 +80,6 @@
 "settings.appearance.light" = "Light";
 "settings.appearance.dark" = "Dark";
 "settings.section.board" = "Board Settings";
-"settings.board.searchVisible" = "Show search bar";
-"settings.board.searchVisible.caption" = "Hide the search bar if search is rarely needed in your workflow.";
 "settings.initialScreen.picker" = "Initial screen";
 "settings.initialScreen.caption" = "Choose which screen opens first when the app launches.";
 "settings.initialScreen.board" = "Board";
@@ -262,3 +260,4 @@
 "service_editor.overdue.keep" = "Save as Unpaid";
 "board.section.pending %lld" = "Upcoming %lld";
 "board.section.paid %lld" = "Paid %lld";
+"board.search.toggle" = "Search";

@@ -28,6 +28,7 @@ public struct BoardView: View {
     @State private var selectedYear = Calendar.current.component(.year, from: .now)
     @State private var selectedMonth = Calendar.current.component(.month, from: .now)
     @State private var boardSearchQuery = ""
+    @State private var isBoardSearchPresented = false
     @State private var selectedSort: BoardSortOption = .nextBillingAsc
     @State private var hasRestoredPersistedViewState = false
     @State private var isSelectionMode = false
@@ -302,6 +303,7 @@ public struct BoardView: View {
                             .font(.title3.weight(.semibold))
                             .lineLimit(1)
                             .minimumScaleFactor(0.85)
+                        }
                     }
                     Spacer()
                     Image(systemName: isDashboardExpanded ? "chevron.up" : "chevron.down")
@@ -535,6 +537,24 @@ public struct BoardView: View {
                         }
                         .buttonStyle(.plain)
                     } else {
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isBoardSearchPresented.toggle()
+                            }
+                            if !isBoardSearchPresented {
+                                boardSearchQuery = ""
+                                isBoardSearchFocused = false
+                            }
+                        } label: {
+                            Image(systemName: "magnifyingglass")
+                                .font(.subheadline.weight(.medium))
+                                .frame(width: 32, height: 32)
+                                .background(isBoardSearchPresented ? Color.accentColor.opacity(0.18) : Color.payCard)
+                                .clipShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(Text("board.search.toggle"))
+
                         sortMenuButton
 
                         Menu {
@@ -596,7 +616,7 @@ public struct BoardView: View {
 
             }
 
-            if displayMode == .board && !isSelectionMode && settingsViewModel.isBoardSearchVisible {
+            if displayMode == .board && !isSelectionMode && isBoardSearchPresented {
                 HStack(spacing: 0) {
                     HStack(spacing: PayBoardSpacing.xs) {
                         Image(systemName: "magnifyingglass")
@@ -608,6 +628,9 @@ public struct BoardView: View {
                             .submitLabel(.search)
                             .onSubmit {
                                 isBoardSearchFocused = false
+                            }
+                            .onAppear {
+                                isBoardSearchFocused = true
                             }
                     }
                     .padding(.horizontal, PayBoardSpacing.sm)
