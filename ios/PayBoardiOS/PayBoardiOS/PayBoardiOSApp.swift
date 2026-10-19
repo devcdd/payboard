@@ -1,5 +1,6 @@
 import SwiftUI
 import AppCore
+import BackgroundTasks
 import Features
 import UserNotifications
 
@@ -17,6 +18,7 @@ struct PayBoardiOSApp: App {
     @StateObject private var settingsViewModel: SettingsViewModel
     @StateObject private var boardViewModel: BoardViewModel
     @State private var selectedTab: AppTab
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
         let environment = AppEnvironment.live()
@@ -70,6 +72,34 @@ struct PayBoardiOSApp: App {
                 Text("settings.backup.signIn.restorePrompt.message")
             }
         }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .background {
+                BackgroundRefresh.schedule()
+            }
+        }
+        .backgroundTask(.appRefresh(BackgroundRefresh.identifier)) {
+            BackgroundRefresh.schedule()
+            await refreshInBackground()
+        }
+    }
+
+    // 백그라운드 실행에서는 BoardView.task 가 돌지 않아 알림 설정을 먼저 맞춰야 자동결제 재예약이 기본값으로 덮이지 않음
+    private func refreshInBackground() async {
+        boardViewModel.setReminderOptions(Array(settingsViewModel.effectiveReminderOptions))
+        boardViewModel.setReminderTime(hour: settingsViewModel.reminderHour, minute: settingsViewModel.reminderMinute)
+        await boardViewModel.onAppear()
+    }
+}
+
+// 위젯이 스스로 결제일을 넘겨 보여주는 것의 보조 수단. 실행 시점은 시스템이 정하고 보장되지 않는다
+private enum BackgroundRefresh {
+    nonisolated static let identifier = "kr.co.cdd.PayBoardiOS.refresh"
+
+    nonisolated static func schedule() {
+        let request = BGAppRefreshTaskRequest(identifier: identifier)
+        let calendar = Calendar.current
+        request.earliestBeginDate = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: .now))
+        try? BGTaskScheduler.shared.submit(request)
     }
 }
 
