@@ -12,14 +12,18 @@ private enum WidgetSharedStore {
     nonisolated static let dataKey = "widget.snapshot.subscriptions.v1"
 
     nonisolated static func subscriptions(asOf date: Date = .now) -> [WidgetSubscription] {
+        storedSubscriptions().map { $0.projected(asOf: date) }
+    }
+
+    // 결제일 당일에는 projected가 이미 다음 회차로 넘기므로, 오늘 결제 여부는 저장된 원본으로 판단한다
+    nonisolated static func storedSubscriptions() -> [WidgetSubscription] {
         guard let defaults = UserDefaults(suiteName: appGroupID),
               let data = defaults.data(forKey: dataKey) else {
             return []
         }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        let rows = (try? decoder.decode([WidgetSubscription].self, from: data)) ?? []
-        return rows.map { $0.projected(asOf: date) }
+        return (try? decoder.decode([WidgetSubscription].self, from: data)) ?? []
     }
 
     // 앱이 깨어나지 않아도 매일 0시 엔트리에서 결제일과 남은 일수를 다시 계산하도록 일주일치를 미리 만든다
@@ -84,6 +88,30 @@ private struct WidgetSubscription: Codable, Identifiable {
             copy.nextBillingDate = next
         }
         return copy
+    }
+
+    // 앱이 기록한 결제일이거나, 저장된 다음 결제일부터 회차를 넘겨 가며 해당 날짜에 닿으면 그날 결제로 본다
+    nonisolated func isBilled(on date: Date, calendar: Calendar = .current) -> Bool {
+        let day = calendar.startOfDay(for: date)
+        if (paymentDates ?? []).contains(where: { calendar.isDate($0, inSameDayAs: day) }) {
+            return true
+        }
+        var current = nextBillingDate
+        if calendar.isDate(current, inSameDayAs: day) {
+            return true
+        }
+        guard autoAdvances == true, let billingCycle else { return false }
+        var anchorDay = billingAnchorDay
+        while calendar.startOfDay(for: current) < day {
+            anchorDay = BillingDateCalculator.resolvedAnchorDay(for: current, anchorDay: anchorDay, calendar: calendar)
+            let next = BillingDateCalculator.advance(from: current, cycle: billingCycle, anchorDay: anchorDay, calendar: calendar)
+            guard next > current else { return false }
+            current = next
+            if calendar.isDate(current, inSameDayAs: day) {
+                return true
+            }
+        }
+        return false
     }
 }
 
@@ -622,10 +650,166 @@ struct PaymentCalendarWidget: Widget {
     }
 }
 
+private struct TodayPaymentEntry: TimelineEntry {
+    let date: Date
+    let subscriptions: [WidgetSubscription]
+}
+
+private struct TodayPaymentProvider: TimelineProvider {
+    func placeholder(in context: Context) -> TodayPaymentEntry {
+        TodayPaymentEntry(date: .now, subscriptions: [])
+    }
+
+    func getSnapshot(in context: Context, completion: @escaping (TodayPaymentEntry) -> Void) {
+        completion(makeEntry(at: .now))
+    }
+
+    func getTimeline(in context: Context, completion: @escaping (Timeline<TodayPaymentEntry>) -> Void) {
+        let entries = WidgetSharedStore.dailyEntryDates().map(makeEntry(at:))
+        completion(Timeline(entries: entries, policy: .atEnd))
+    }
+
+    private func makeEntry(at date: Date) -> TodayPaymentEntry {
+        let subscriptions = WidgetSharedStore.storedSubscriptions()
+            .filter { $0.isBilled(on: date) }
+            .sorted { $0.amount > $1.amount }
+        return TodayPaymentEntry(date: date, subscriptions: subscriptions)
+    }
+}
+
+private struct TodayPaymentWidgetView: View {
+    @Environment(\.widgetFamily) private var family
+    let entry: TodayPaymentEntry
+
+    // 앱 대시보드 합계와 같은 형식: 원화는 "원" 접미사, 그 외 통화는 소수점 없이 표시
+    private func formattedAmount(_ amount: Double, currencyCode: String) -> String {
+        let formatter = NumberFormatter()
+        formatter.maximumFractionDigits = 0
+        if currencyCode.uppercased() == "KRW" {
+            formatter.numberStyle = .decimal
+            return (formatter.string(from: NSNumber(value: amount)) ?? "\(Int(amount))") + "원"
+        }
+        formatter.numberStyle = .currency
+        formatter.currencyCode = currencyCode
+        return formatter.string(from: NSNumber(value: amount)) ?? "\(amount)"
+    }
+
+    // 통화가 섞여 있으면 통화별 합계를 이어 붙인다. 원화를 먼저 보여준다
+    private var totalText: String {
+        let fixed = entry.subscriptions.filter { !$0.isAmountUndecided }
+        guard !fixed.isEmpty else {
+            return formattedAmount(0, currencyCode: entry.subscriptions.first?.currencyCode ?? "KRW")
+        }
+        let totals = Dictionary(grouping: fixed, by: { $0.currencyCode.uppercased() })
+            .mapValues { $0.reduce(0) { $0 + $1.amount } }
+        return totals.keys
+            .sorted { lhs, rhs in lhs == "KRW" ? true : (rhs == "KRW" ? false : lhs < rhs) }
+            .map { formattedAmount(totals[$0] ?? 0, currencyCode: $0) }
+            .joined(separator: " + ")
+    }
+
+    private var hasUndecidedAmount: Bool {
+        entry.subscriptions.contains(where: \.isAmountUndecided)
+    }
+
+    private func amountText(for item: WidgetSubscription) -> String {
+        item.isAmountUndecided ? "변동" : formattedAmount(item.amount, currencyCode: item.currencyCode)
+    }
+
+    private var summary: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("오늘 결제")
+                .font(.caption)
+                .foregroundStyle(Color.payMuted)
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(totalText)
+                    .font(.title3.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                if hasUndecidedAmount {
+                    Text(verbatim: "+ α")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.payAccent)
+                }
+            }
+            Text(entry.subscriptions.isEmpty ? "오늘은 결제가 없어요" : "\(entry.subscriptions.count)건")
+                .font(.caption)
+                .foregroundStyle(Color.payMuted)
+        }
+    }
+
+    var body: some View {
+        Group {
+            if family == .systemSmall {
+                VStack(alignment: .leading, spacing: PayBoardSpacing.sm) {
+                    summary
+                    Spacer(minLength: 0)
+                    if !entry.subscriptions.isEmpty {
+                        PaymentCalendarIconRow(
+                            items: entry.subscriptions.map { PaymentCalendarIconItem(subscriptionID: $0.id, marker: .scheduled) },
+                            maxIcons: 4,
+                            iconSize: 20
+                        ) { item in
+                            if let subscription = entry.subscriptions.first(where: { $0.id == item.subscriptionID }) {
+                                WidgetSubscriptionIcon(item: subscription, size: 20)
+                            }
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            } else {
+                HStack(alignment: .top, spacing: PayBoardSpacing.lg) {
+                    summary
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if !entry.subscriptions.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ForEach(entry.subscriptions.prefix(4)) { item in
+                                HStack(spacing: PayBoardSpacing.sm) {
+                                    WidgetSubscriptionIcon(item: item, size: 18)
+                                    Text(item.name)
+                                        .font(.subheadline)
+                                        .lineLimit(1)
+                                    Spacer(minLength: 0)
+                                    Text(amountText(for: item))
+                                        .font(.subheadline.weight(.semibold))
+                                        .monospacedDigit()
+                                        .lineLimit(1)
+                                }
+                            }
+                            if entry.subscriptions.count > 4 {
+                                Text("외 \(entry.subscriptions.count - 4)건")
+                                    .font(.caption)
+                                    .foregroundStyle(Color.payMuted)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            }
+        }
+        .containerBackground(Color.payBackground, for: .widget)
+    }
+}
+
+struct TodayPaymentWidget: Widget {
+    let kind: String = "TodayPaymentWidget"
+
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: kind, provider: TodayPaymentProvider()) { entry in
+            TodayPaymentWidgetView(entry: entry)
+        }
+        .configurationDisplayName("오늘 결제")
+        .description("오늘 나가는 결제 금액을 보여줍니다.")
+        .supportedFamilies([.systemSmall, .systemMedium])
+    }
+}
+
 @main
 struct PayBoardWidgetsBundle: WidgetBundle {
     var body: some Widget {
         EarliestThreeWidget()
+        TodayPaymentWidget()
         SelectedSubscriptionWidget()
         TwoWeekPaymentCalendarWidget()
         ThreeWeekPaymentCalendarWidget()
