@@ -254,12 +254,38 @@ public struct BoardView: View {
                     .foregroundStyle(Color.payMuted)
                     .padding(.horizontal, PayBoardSpacing.xs)
             } else {
-                LazyVGrid(columns: columns, spacing: PayBoardSpacing.md) {
-                    ForEach(boardSubscriptions) { subscription in
-                        subscriptionCard(for: subscription)
+                let calendar = Calendar.current
+                let (paid, pending) = boardSubscriptions.reduce(into: ([Subscription](), [Subscription]())) { result, subscription in
+                    if isPaidInDisplayedMonth(subscription, calendar: calendar) {
+                        result.0.append(subscription)
+                    } else {
+                        result.1.append(subscription)
                     }
                 }
+                subscriptionGroup("board.section.pending \(pending.count)", subscriptions: pending)
+                subscriptionGroup("board.section.paid \(paid.count)", subscriptions: paid)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func subscriptionGroup(_ titleKey: LocalizedStringKey, subscriptions: [Subscription]) -> some View {
+        if !subscriptions.isEmpty {
+            Text(titleKey)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(Color.payMuted)
+                .padding(.horizontal, PayBoardSpacing.xs)
+            LazyVGrid(columns: columns, spacing: PayBoardSpacing.md) {
+                ForEach(subscriptions) { subscription in
+                    subscriptionCard(for: subscription)
+                }
+            }
+        }
+    }
+
+    private func isPaidInDisplayedMonth(_ subscription: Subscription, calendar: Calendar) -> Bool {
+        paymentHistoryDates(for: subscription).contains {
+            calendar.isDate($0, equalTo: displayedMonthStart, toGranularity: .month)
         }
     }
 

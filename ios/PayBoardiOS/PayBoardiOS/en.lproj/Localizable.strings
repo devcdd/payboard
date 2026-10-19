@@ -260,3 +260,5 @@
 "service_editor.overdue.message" = "Record past payments as paid and move to the next billing date?";
 "service_editor.overdue.complete" = "Mark as Paid";
 "service_editor.overdue.keep" = "Save as Unpaid";
+"board.section.pending %lld" = "Upcoming %lld";
+"board.section.paid %lld" = "Paid %lld";

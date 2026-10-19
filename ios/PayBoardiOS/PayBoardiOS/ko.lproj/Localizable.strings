@@ -260,3 +260,5 @@
 "service_editor.overdue.message" = "지난 결제를 결제 완료로 기록하고 다음 결제일로 넘길까요?";
 "service_editor.overdue.complete" = "결제 완료 처리";
 "service_editor.overdue.keep" = "미결제로 저장";
+"board.section.pending %lld" = "결제 전 %lld";
+"board.section.paid %lld" = "결제 완료 %lld";
