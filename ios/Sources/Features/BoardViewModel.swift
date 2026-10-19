@@ -120,14 +120,14 @@ public final class BoardViewModel: ObservableObject {
     }
 
     public func markPaymentComplete(_ subscription: Subscription) async {
-        let completed = completedSubscription(from: subscription)
+        let completed = subscription.completed(at: .now)
         await saveAndReschedule(updatedSubscriptions: [completed])
     }
 
     public func markPaymentComplete(ids: Set<UUID>) async {
         let updates = subscriptions
             .filter { ids.contains($0.id) }
-            .map { completedSubscription(from: $0) }
+            .map { $0.completed(at: .now) }
         await saveAndReschedule(updatedSubscriptions: updates)
     }
 
@@ -245,34 +245,13 @@ public final class BoardViewModel: ObservableObject {
                 calendar.startOfDay(for: subscription.nextBillingDate) <= today
         }
         guard !dueItems.isEmpty else { return }
-        let updates = dueItems.map { autoPaidSubscription(from: $0, through: today, calendar: calendar, updatedAt: referenceDate) }
-        await saveAndReschedule(updatedSubscriptions: updates)
-    }
-
-    // 앱을 오래 열지 않아 밀린 회차를 모두 원래 결제일로 기록하며 오늘 이후까지 넘김
-    private func autoPaidSubscription(from subscription: Subscription, through today: Date, calendar: Calendar, updatedAt: Date) -> Subscription {
-        var copy = subscription
-        while calendar.startOfDay(for: copy.nextBillingDate) <= today {
-            let advanced = completedSubscription(from: copy, at: copy.nextBillingDate)
-            guard advanced.nextBillingDate > copy.nextBillingDate else { break }
-            copy = advanced
+        // 앱을 오래 열지 않아 밀린 회차도 모두 원래 결제일로 기록
+        let updates = dueItems.map { subscription in
+            var paid = subscription.completedThrough(today, calendar: calendar)
+            paid.updatedAt = referenceDate
+            return paid
         }
-        copy.updatedAt = updatedAt
-        return copy
-    }
-
-    private func completedSubscription(from subscription: Subscription) -> Subscription {
-        completedSubscription(from: subscription, at: .now)
-    }
-
-    private func completedSubscription(from subscription: Subscription, at date: Date) -> Subscription {
-        var copy = subscription
-        copy.lastPaymentDate = date
-        copy.paymentHistoryDates = appendPaymentHistory(date: date, to: subscription.paymentHistoryDates)
-        copy.billingAnchorDay = BillingDateCalculator.resolvedAnchorDay(for: subscription.nextBillingDate, anchorDay: subscription.billingAnchorDay)
-        copy.nextBillingDate = BillingDateCalculator.advance(from: subscription.nextBillingDate, cycle: subscription.billingCycle, anchorDay: copy.billingAnchorDay)
-        copy.updatedAt = date
-        return copy
+        await saveAndReschedule(updatedSubscriptions: updates)
     }
 
     private func canceledSubscription(from subscription: Subscription) -> Subscription {
@@ -284,12 +263,6 @@ public final class BoardViewModel: ObservableObject {
         copy.nextBillingDate = BillingDateCalculator.rewind(from: subscription.nextBillingDate, cycle: subscription.billingCycle, anchorDay: copy.billingAnchorDay)
         copy.updatedAt = .now
         return copy
-    }
-
-    private func appendPaymentHistory(date: Date, to history: [Date]) -> [Date] {
-        var updated = history
-        updated.append(date)
-        return updated.sorted(by: <)
     }
 
     private func removeLatestPaymentHistory(from history: [Date]) -> [Date] {
