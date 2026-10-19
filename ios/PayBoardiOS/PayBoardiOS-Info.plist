@@ -36,10 +36,6 @@
 	<string>$(KAKAO_IOS_URL_SCHEME)</string>
 	<key>PAYBOARD_SERVER_URL</key>
 	<string>$(PAYBOARD_SERVER_URL)</string>
-	<key>SUPABASE_ANON_KEY</key>
-	<string>$(SUPABASE_ANON_KEY)</string>
-	<key>SUPABASE_URL</key>
-	<string>$(SUPABASE_URL)</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -56,7 +52,7 @@
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>CFBundleURLName</key>
-			<string>supabase-auth</string>
+			<string>payboard-auth</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>$(PAYBOARD_AUTH_URL_SCHEME)</string>

@@ -23,7 +23,7 @@
 "settings.push.requestPermission" = "Request notification permission";
 "settings.push.openSettings" = "Open system settings";
 "settings.section.backup" = "Cloud Backup";
-"settings.backup.notConfigured" = "Supabase keys are missing, so backup sign-in is unavailable.";
+"settings.backup.notConfigured" = "The server URL is missing, so backup sign-in is unavailable.";
 "settings.backup.account" = "Connected account";
 "settings.backup.signOut" = "Sign out";
 "settings.backup.signIn.invalidCredential" = "Could not read Apple sign-in credentials.";
@@ -48,7 +48,6 @@
 "settings.backup.deleteAccount.inProgress" = "Deleting account...";
 "settings.backup.deleteAccount.success" = "Your account has been deleted.";
 "settings.backup.deleteAccount.failed" = "Failed to delete your account.";
-"settings.backup.deleteAccount.serverNotConfigured" = "Account deletion is unavailable because the server URL is missing.";
 "settings.backup.deleteAccount.confirm.title" = "Delete your account?";
 "settings.backup.deleteAccount.confirm.message" = "Deleting your account will permanently remove your backup data and account data. This cannot be undone.";
 "settings.backup.deleteAccount.confirm.message.account" = "Deleting %@ will permanently remove your backup data and account data. This cannot be undone.";

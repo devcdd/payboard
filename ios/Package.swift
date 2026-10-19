@@ -17,9 +17,6 @@ let package = Package(
         .library(name: "AppCore", targets: ["AppCore"]),
         .executable(name: "PayBoardApp", targets: ["PayBoardApp"])
     ],
-    dependencies: [
-        .package(url: "https://github.com/supabase/supabase-swift.git", from: "2.0.0")
-    ],
     targets: [
         .target(name: "Domain"),
         .target(
@@ -36,8 +33,7 @@ let package = Package(
             dependencies: [
                 "Domain",
                 "Data",
-                "DesignSystem",
-                .product(name: "Supabase", package: "supabase-swift")
+                "DesignSystem"
             ]
         ),
         .target(

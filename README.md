@@ -29,7 +29,7 @@ PayBoard는 흩어져 있는 정기결제와 고정지출을 한 화면에서 �
 
 이 저장소는 PayBoard 모노레포입니다.
 
-- `ios/`: 현재 운영 중인 iOS 앱, Swift 패키지 모듈, Xcode 프로젝트, 위젯, Supabase 연동 스크립트
+- `ios/`: 현재 운영 중인 iOS 앱, Swift 패키지 모듈, Xcode 프로젝트, 위젯
 - `android/`: Android 앱 작업 공간
 
 ## iOS Development
@@ -65,6 +65,6 @@ Xcode project:
 
 - `ios/PayBoardiOS.xcodeproj`
 
-Supabase example config:
+Local config example (`ios/Payboard.xcconfig` 로 복사해 사용):
 
 - `ios/PayboardConfig.example.xcconfig`

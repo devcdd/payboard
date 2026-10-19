@@ -5,9 +5,10 @@ import Data
 import AuthenticationServices
 import CryptoKit
 import Security
-import Supabase
 #if os(iOS)
 import UIKit
+#elseif os(macOS)
+import AppKit
 #endif
 
 public enum AppAppearance: String, CaseIterable, Sendable, Identifiable {
@@ -87,9 +88,6 @@ public final class SettingsViewModel: ObservableObject {
     private static let boardSearchVisibleKey = "settings.board.searchVisible"
     private static let initialScreenKey = "settings.initialScreen"
     private static let hasRequestedInitialNotificationPermissionKey = "settings.pushNotifications.hasRequestedInitialPermission"
-    private static let latestBackupsTable = "subscription_latest_backups"
-    private static let backupItemsTable = "subscription_items"
-    private static let paymentHistoriesTable = "subscription_payment_histories"
     private static let uploadDebounceInterval: TimeInterval = 0.8
 
     @Published public var selectedOptions: Set<ReminderOption> {
@@ -147,8 +145,9 @@ public final class SettingsViewModel: ObservableObject {
     private let scheduler: any NotificationScheduler
     private let repository: any SubscriptionRepository
     private let userDefaults: UserDefaults
-    private let supabaseClient: SupabaseClient?
-    private let accountDeletionServerURL: URL?
+    private let serverClient: PayBoardServerClient?
+    private let webAuthPresentationContext = WebAuthPresentationContext()
+    private var kakaoWebAuthSession: ASWebAuthenticationSession?
     private var appleSignInNonce: String?
     private var lastUploadRequestedAt: Date?
 
@@ -179,14 +178,8 @@ public final class SettingsViewModel: ObservableObject {
         components.second = 0
         self.reminderTime = Calendar.current.date(from: components) ?? .now
 
-        if let config = Self.loadSupabaseConfiguration() {
-            self.supabaseClient = SupabaseClient(supabaseURL: config.url, supabaseKey: config.anonKey)
-            self.isBackupConfigured = true
-        } else {
-            self.supabaseClient = nil
-            self.isBackupConfigured = false
-        }
-        self.accountDeletionServerURL = Self.loadAccountDeletionServerURL()
+        self.serverClient = Self.loadServerURL().map(PayBoardServerClient.init(baseURL:))
+        self.isBackupConfigured = serverClient != nil
 
         Task {
             await handleInitialPushPermissionFlow()
@@ -288,26 +281,14 @@ public final class SettingsViewModel: ObservableObject {
 
     public var backupConfigurationDebugText: String {
         let processEnvironment = ProcessInfo.processInfo.environment
-        let envURL = processEnvironment["SUPABASE_URL"] ?? processEnvironment["INFOPLIST_KEY_SUPABASE_URL"]
-        let envKey = processEnvironment["SUPABASE_ANON_KEY"] ?? processEnvironment["INFOPLIST_KEY_SUPABASE_ANON_KEY"]
         let envServerURL = processEnvironment["PAYBOARD_SERVER_URL"] ?? processEnvironment["INFOPLIST_KEY_PAYBOARD_SERVER_URL"]
-        let bundleURL = Self.infoDictionaryStringValue(forPrimaryKey: "SUPABASE_URL", fallbackKey: "INFOPLIST_KEY_SUPABASE_URL")
-        let bundleKey = Self.infoDictionaryStringValue(forPrimaryKey: "SUPABASE_ANON_KEY", fallbackKey: "INFOPLIST_KEY_SUPABASE_ANON_KEY")
         let bundleServerURL = Self.infoDictionaryStringValue(forPrimaryKey: "PAYBOARD_SERVER_URL", fallbackKey: "INFOPLIST_KEY_PAYBOARD_SERVER_URL")
-        let normalizedURL = Self.normalizedSecretValue(envURL ?? bundleURL) ?? "<nil>"
-        let normalizedKey = Self.normalizedSecretValue(envKey ?? bundleKey).map(Self.maskSecretValue) ?? "<nil>"
         let normalizedServerURL = Self.normalizedSecretValue(envServerURL ?? bundleServerURL) ?? "<nil>"
 
         return [
-            "ENV SUPABASE_URL: \(envURL ?? "<nil>")",
-            "BUNDLE SUPABASE_URL: \(bundleURL ?? "<nil>")",
-            "ENV SUPABASE_ANON_KEY: \(envKey.map(Self.maskSecretValue) ?? "<nil>")",
-            "BUNDLE SUPABASE_ANON_KEY: \(bundleKey.map(Self.maskSecretValue) ?? "<nil>")",
             "ENV PAYBOARD_SERVER_URL: \(envServerURL ?? "<nil>")",
             "BUNDLE PAYBOARD_SERVER_URL: \(bundleServerURL ?? "<nil>")",
             "BACKUP AUTH REDIRECT URL: \(Self.loadBackupAuthRedirectURL()?.absoluteString ?? "<nil>")",
-            "NORMALIZED URL: \(normalizedURL)",
-            "NORMALIZED KEY: \(normalizedKey)",
             "NORMALIZED SERVER URL: \(normalizedServerURL)",
             "isBackupConfigured: \(isBackupConfigured)"
         ].joined(separator: "\n")
@@ -328,7 +309,7 @@ public final class SettingsViewModel: ObservableObject {
 
     public func handleAppleSignInCompletion(_ result: Result<ASAuthorization, any Error>) async {
         backupErrorDebugText = nil
-        guard let supabaseClient else {
+        guard let serverClient else {
             backupMessageKey = "settings.backup.notConfigured"
             return
         }
@@ -348,13 +329,7 @@ public final class SettingsViewModel: ObservableObject {
             }
 
             do {
-                _ = try await supabaseClient.auth.signInWithIdToken(
-                    credentials: OpenIDConnectCredentials(
-                        provider: .apple,
-                        idToken: idToken,
-                        nonce: rawNonce
-                    )
-                )
+                _ = try await serverClient.signInWithApple(idToken: idToken, nonce: rawNonce)
                 appleSignInNonce = nil
                 await refreshBackupAuthState()
                 if let email = credential.email, !email.isEmpty {
@@ -364,7 +339,7 @@ public final class SettingsViewModel: ObservableObject {
                 await bootstrapBackupAfterSignIn()
             } catch {
                 backupMessageKey = "settings.backup.signIn.failed"
-                backupErrorDebugText = Self.describeBackupSignInError(error, stage: "supabase")
+                backupErrorDebugText = Self.describeBackupSignInError(error, stage: "server")
             }
         case let .failure(error):
             backupMessageKey = "settings.backup.signIn.failed"
@@ -376,7 +351,7 @@ public final class SettingsViewModel: ObservableObject {
         guard !isBackupSignInInProgress else { return }
 
         backupErrorDebugText = nil
-        guard let supabaseClient else {
+        guard let serverClient else {
             backupMessageKey = "settings.backup.notConfigured"
             return
         }
@@ -390,10 +365,20 @@ public final class SettingsViewModel: ObservableObject {
         defer { isBackupSignInInProgress = false }
 
         do {
-            _ = try await supabaseClient.auth.signInWithOAuth(
-                provider: .kakao,
-                redirectTo: redirectTo
-            )
+            let codeVerifier = Self.randomCodeVerifier()
+            guard let startURL = serverClient.kakaoStartURL(
+                redirectTo: redirectTo,
+                codeChallenge: Self.codeChallenge(for: codeVerifier)
+            ) else {
+                throw URLError(.badURL)
+            }
+            let callbackURL = try await authenticateInBrowser(url: startURL, callbackScheme: redirectTo.scheme)
+            let queryItems = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false)?.queryItems ?? []
+            guard let code = queryItems.first(where: { $0.name == "code" })?.value else {
+                let reason = queryItems.first(where: { $0.name == "error" })?.value ?? "missing_code"
+                throw ServerError(statusCode: 401, message: reason)
+            }
+            _ = try await serverClient.exchangeKakaoCode(code, codeVerifier: codeVerifier)
             await refreshBackupAuthState()
             backupMessageKey = "settings.backup.signIn.success"
             backupErrorDebugText = nil
@@ -410,31 +395,22 @@ public final class SettingsViewModel: ObservableObject {
     }
 
     public func signOutBackup() async {
-        guard let supabaseClient else {
+        guard let serverClient else {
             backupMessageKey = "settings.backup.notConfigured"
             return
         }
 
-        do {
-            try await supabaseClient.auth.signOut()
-            isBackupSignedIn = false
-            backupAccountIdentifier = nil
-            latestBackupAt = nil
-            backupMessageKey = "settings.backup.signOut.success"
-        } catch {
-            backupMessageKey = "settings.backup.signOut.failed"
-        }
+        await serverClient.signOut()
+        isBackupSignedIn = false
+        backupAccountIdentifier = nil
+        latestBackupAt = nil
+        backupMessageKey = "settings.backup.signOut.success"
     }
 
     public func deleteAccount() async {
         guard !isBackupSyncInProgress, !isAccountDeletionInProgress else { return }
-        guard let supabaseClient else {
+        guard let serverClient else {
             backupMessageKey = "settings.backup.notConfigured"
-            return
-        }
-        guard let accountDeletionServerURL else {
-            backupMessageKey = "settings.backup.deleteAccount.serverNotConfigured"
-            backupErrorDebugText = "PAYBOARD_SERVER_URL is missing"
             return
         }
 
@@ -442,12 +418,7 @@ public final class SettingsViewModel: ObservableObject {
         defer { isAccountDeletionInProgress = false }
 
         do {
-            let session = try await supabaseClient.auth.session
-            try await deleteAccountFromServer(
-                accessToken: session.accessToken,
-                serverURL: accountDeletionServerURL
-            )
-            try? await supabaseClient.auth.signOut()
+            try await serverClient.deleteAccount()
             clearBackupStateAfterAccountDeletion()
             backupMessageKey = "settings.backup.deleteAccount.success"
             backupErrorDebugText = nil
@@ -474,7 +445,7 @@ public final class SettingsViewModel: ObservableObject {
         lastUploadRequestedAt = now
 
         guard !isBackupSyncInProgress else { return }
-        guard let supabaseClient else {
+        guard let serverClient else {
             if showResultMessage {
                 backupMessageKey = "settings.backup.notConfigured"
             }
@@ -486,16 +457,7 @@ public final class SettingsViewModel: ObservableObject {
         defer { isBackupSyncInProgress = false }
 
         do {
-            let session = try await supabaseClient.auth.session
-            let subscriptions = try await fetchAllLocalSubscriptions()
-            let timestamp = Date()
-            try await replaceRemoteBackup(
-                with: subscriptions,
-                for: session.user.id,
-                client: supabaseClient,
-                updatedAt: timestamp
-            )
-            latestBackupAt = timestamp
+            latestBackupAt = try await uploadCurrentDataAsBackup(client: serverClient)
             if showResultMessage {
                 backupMessageKey = "settings.backup.upload.success"
             }
@@ -510,7 +472,7 @@ public final class SettingsViewModel: ObservableObject {
 
     public func restoreLatestBackup() async {
         guard !isBackupSyncInProgress else { return }
-        guard let supabaseClient else {
+        guard let serverClient else {
             backupMessageKey = "settings.backup.notConfigured"
             return
         }
@@ -520,23 +482,20 @@ public final class SettingsViewModel: ObservableObject {
 
         do {
             let existingSubscriptions = try await fetchAllLocalSubscriptions()
-            let session = try await supabaseClient.auth.session
-            let metadata = try await fetchLatestBackupMetadata(for: session.user.id, client: supabaseClient)
-            guard let latestBackup = metadata else {
+            guard let latestBackup = try await serverClient.backupMetadata() else {
                 backupMessageKey = "settings.backup.restore.empty"
                 backupErrorDebugText = nil
                 return
             }
 
-            let remoteSubscriptions = try await fetchRemoteSubscriptions(for: session.user.id, client: supabaseClient)
-            if latestBackup.item_count > 0 && remoteSubscriptions.isEmpty {
+            let backupData = try await serverClient.backupData(as: BackupDataResponse.self)
+            if latestBackup.item_count > 0 && backupData.items.isEmpty {
                 throw DomainError.notFound
             }
 
-            let remotePaymentHistories = try await fetchRemotePaymentHistories(for: session.user.id, client: supabaseClient)
             let restoredSubscriptions = try buildSubscriptions(
-                from: remoteSubscriptions,
-                paymentHistories: remotePaymentHistories
+                from: backupData.items,
+                paymentHistories: backupData.payment_histories
             )
 
             try await replaceAllSubscriptions(with: restoredSubscriptions)
@@ -562,53 +521,40 @@ public final class SettingsViewModel: ObservableObject {
     }
 
     public func refreshBackupAuthState() async {
-        guard let supabaseClient else {
+        guard let serverClient, let session = await serverClient.currentSession else {
             isBackupSignedIn = false
             backupAccountIdentifier = nil
+            latestBackupAt = nil
             return
         }
 
+        isBackupSignedIn = true
+        backupAccountIdentifier = session.user.email ?? session.user.id
         do {
-            let session = try await supabaseClient.auth.session
-            isBackupSignedIn = true
-            backupAccountIdentifier = session.user.email ?? session.user.id.uuidString
-            latestBackupAt = try await fetchLatestBackupMetadata(for: session.user.id, client: supabaseClient)?.updated_at
-        } catch {
+            latestBackupAt = try await serverClient.backupMetadata()?.updated_at
+        } catch let error as ServerError where error.isUnauthorized {
             isBackupSignedIn = false
             backupAccountIdentifier = nil
+            latestBackupAt = nil
+        } catch {
+            // 오프라인 등 일시적 실패로 로그인 상태까지 잃지 않도록 세션은 유지함
             latestBackupAt = nil
         }
     }
 
-    private struct SupabaseConfiguration {
-        let url: URL
-        let anonKey: String
-    }
-
-    private struct DeleteAccountResponse: Decodable {
-        let deleted_user_id: String
-        let deleted_at: Date
-    }
-
-    private struct BackupMetadataUpsertRow: Encodable {
-        let user_id: UUID
+    private struct BackupUpload: Encodable, Sendable {
         let backup_version: Int
-        let item_count: Int
-        let device_id: String?
-        let app_version: String?
-        let updated_at: Date
+        let items: [BackupSubscriptionItemRow]
+        let payment_histories: [BackupPaymentHistoryRow]
     }
 
-    private struct BackupMetadataRow: Decodable {
-        let user_id: UUID
-        let item_count: Int
-        let created_at: Date
-        let updated_at: Date
+    private struct BackupDataResponse: Decodable, Sendable {
+        let items: [BackupSubscriptionItemRow]
+        let payment_histories: [BackupPaymentHistoryRow]
     }
 
-    private struct BackupSubscriptionItemRow: Codable {
+    private struct BackupSubscriptionItemRow: Codable, Sendable {
         let id: UUID
-        let user_id: UUID
         let name: String
         let category: String
         let amount: Decimal
@@ -631,8 +577,7 @@ public final class SettingsViewModel: ObservableObject {
         let updated_at: Date
     }
 
-    private struct BackupPaymentHistoryRow: Codable {
-        let user_id: UUID
+    private struct BackupPaymentHistoryRow: Codable, Sendable {
         let subscription_id: UUID
         let paid_at: Date
         let scheduled_date: Date
@@ -644,25 +589,7 @@ public final class SettingsViewModel: ObservableObject {
         let updated_at: Date
     }
 
-    private static func loadSupabaseConfiguration() -> SupabaseConfiguration? {
-        let processEnvironment = ProcessInfo.processInfo.environment
-        let urlValue = normalizedSecretValue(
-            processEnvironment["SUPABASE_URL"]
-                ?? processEnvironment["INFOPLIST_KEY_SUPABASE_URL"]
-                ?? infoDictionaryStringValue(forPrimaryKey: "SUPABASE_URL", fallbackKey: "INFOPLIST_KEY_SUPABASE_URL")
-        )
-        let keyValue = normalizedSecretValue(
-            processEnvironment["SUPABASE_ANON_KEY"]
-                ?? processEnvironment["INFOPLIST_KEY_SUPABASE_ANON_KEY"]
-                ?? infoDictionaryStringValue(forPrimaryKey: "SUPABASE_ANON_KEY", fallbackKey: "INFOPLIST_KEY_SUPABASE_ANON_KEY")
-        )
-        guard let urlValue, let keyValue, let url = URL(string: urlValue) else {
-            return nil
-        }
-        return SupabaseConfiguration(url: url, anonKey: keyValue)
-    }
-
-    private static func loadAccountDeletionServerURL() -> URL? {
+    private static func loadServerURL() -> URL? {
         let processEnvironment = ProcessInfo.processInfo.environment
         let urlValue = normalizedSecretValue(
             processEnvironment["PAYBOARD_SERVER_URL"]
@@ -710,17 +637,6 @@ public final class SettingsViewModel: ObservableObject {
         return trimmed
     }
 
-    private static func maskSecretValue(_ rawValue: String) -> String {
-        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return "<empty>" }
-        if trimmed.count <= 8 {
-            return String(repeating: "*", count: trimmed.count)
-        }
-        let prefix = trimmed.prefix(6)
-        let suffix = trimmed.suffix(4)
-        return "\(prefix)...\(suffix)"
-    }
-
     private static func describeBackupSignInError(_ error: any Error, stage: String) -> String {
         let nsError = error as NSError
         return "stage=\(stage), domain=\(nsError.domain), code=\(nsError.code), desc=\(nsError.localizedDescription)"
@@ -737,51 +653,6 @@ public final class SettingsViewModel: ObservableObject {
             && nsError.code == ASWebAuthenticationSessionError.canceledLogin.rawValue
     }
 
-    private func deleteAccountFromServer(
-        accessToken: String,
-        serverURL: URL
-    ) async throws {
-        let endpoint = serverURL
-            .appendingPathComponent("v1", isDirectory: true)
-            .appendingPathComponent("account", isDirectory: true)
-            .appendingPathComponent("delete", isDirectory: false)
-
-        var request = URLRequest(url: endpoint)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
-        request.httpBody = try JSONEncoder().encode(["reason": "user_requested"])
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw URLError(.badServerResponse)
-        }
-        guard (200 ..< 300).contains(httpResponse.statusCode) else {
-            let message = Self.extractServerErrorMessage(from: data) ?? "HTTP \(httpResponse.statusCode)"
-            throw NSError(
-                domain: "SettingsViewModel.DeleteAccount",
-                code: httpResponse.statusCode,
-                userInfo: [NSLocalizedDescriptionKey: message]
-            )
-        }
-
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        _ = try decoder.decode(DeleteAccountResponse.self, from: data)
-    }
-
-    private static func extractServerErrorMessage(from data: Data) -> String? {
-        guard !data.isEmpty else { return nil }
-        if let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let errorMessage = payload["error"] as? String,
-           !errorMessage.isEmpty {
-            return errorMessage
-        }
-        return String(data: data, encoding: .utf8)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .nilIfEmpty
-    }
-
     private func clearBackupStateAfterAccountDeletion() {
         isBackupSignedIn = false
         backupAccountIdentifier = nil
@@ -791,179 +662,56 @@ public final class SettingsViewModel: ObservableObject {
     }
 
     private func bootstrapBackupAfterSignIn() async {
-        guard let supabaseClient else { return }
+        guard let serverClient else { return }
 
         do {
-            let session = try await supabaseClient.auth.session
-            if let metadata = try await fetchLatestBackupMetadata(for: session.user.id, client: supabaseClient) {
+            if let metadata = try await serverClient.backupMetadata() {
                 backupMessageKey = "settings.backup.signIn.restorePrompt"
                 isShowingRestorePromptAfterSignIn = true
                 latestBackupAt = metadata.updated_at
             } else {
-                try await uploadCurrentDataAsBackup(for: session.user.id, client: supabaseClient)
+                latestBackupAt = try await uploadCurrentDataAsBackup(client: serverClient)
                 backupMessageKey = "settings.backup.signIn.autoBackupDone"
-                latestBackupAt = .now
             }
         } catch {
             backupErrorDebugText = Self.describeBackupSyncError(error, operation: "post_sign_in_bootstrap")
         }
     }
 
-    private func fetchLatestBackupMetadata(
-        for userID: UUID,
-        client: SupabaseClient
-    ) async throws -> BackupMetadataRow? {
-        let rows: [BackupMetadataRow] = try await client
-            .from(Self.latestBackupsTable)
-            .select("user_id,item_count,created_at,updated_at")
-            .eq("user_id", value: userID)
-            .limit(1)
-            .execute()
-            .value
-        return rows.first
+    private func uploadCurrentDataAsBackup(client: PayBoardServerClient) async throws -> Date {
+        let subscriptions = try await fetchAllLocalSubscriptions()
+        let upload = BackupUpload(
+            backup_version: 2,
+            items: subscriptions.enumerated().map { index, subscription in
+                makeBackupSubscriptionItemRow(from: subscription, sortOrder: index)
+            },
+            payment_histories: subscriptions.flatMap(makePaymentHistoryRows(from:))
+        )
+        return try await client.putBackup(upload).updated_at
     }
 
-    private func uploadCurrentDataAsBackup(
-        for userID: UUID,
-        client: SupabaseClient
-    ) async throws {
-        let subscriptions = try await fetchAllLocalSubscriptions()
-        try await replaceRemoteBackup(
-            with: subscriptions,
-            for: userID,
-            client: client,
-            updatedAt: .now
-        )
+    private func authenticateInBrowser(url: URL, callbackScheme: String?) async throws -> URL {
+        defer { kakaoWebAuthSession = nil }
+        return try await withCheckedThrowingContinuation { continuation in
+            let session = ASWebAuthenticationSession(url: url, callbackURLScheme: callbackScheme) { callbackURL, error in
+                if let callbackURL {
+                    continuation.resume(returning: callbackURL)
+                } else {
+                    continuation.resume(throwing: error ?? URLError(.userCancelledAuthentication))
+                }
+            }
+            session.presentationContextProvider = webAuthPresentationContext
+            kakaoWebAuthSession = session
+            if !session.start() {
+                continuation.resume(throwing: URLError(.cannotOpenFile))
+            }
+        }
     }
 
     private func fetchAllLocalSubscriptions() async throws -> [Subscription] {
         let active = try await repository.fetchAll()
         let archived = try await repository.fetchArchived()
         return active + archived
-    }
-
-    private func replaceRemoteBackup(
-        with subscriptions: [Subscription],
-        for userID: UUID,
-        client: SupabaseClient,
-        updatedAt: Date
-    ) async throws {
-        try await deleteRemoteBackupTables(for: userID, client: client)
-
-        let itemRows = subscriptions.enumerated().map { index, subscription in
-            makeBackupSubscriptionItemRow(
-                from: subscription,
-                userID: userID,
-                sortOrder: index
-            )
-        }
-
-        if !itemRows.isEmpty {
-            try await client
-                .from(Self.backupItemsTable)
-                .insert(itemRows)
-                .execute()
-        }
-
-        let paymentRows = subscriptions.flatMap { subscription in
-            makePaymentHistoryRows(from: subscription, userID: userID)
-        }
-
-        if !paymentRows.isEmpty {
-            try await client
-                .from(Self.paymentHistoriesTable)
-                .insert(paymentRows)
-                .execute()
-        }
-
-        let metadataRow = BackupMetadataUpsertRow(
-            user_id: userID,
-            backup_version: 2,
-            item_count: subscriptions.count,
-            device_id: nil,
-            app_version: nil,
-            updated_at: updatedAt
-        )
-        try await client
-            .from(Self.latestBackupsTable)
-            .upsert(metadataRow, onConflict: "user_id")
-            .execute()
-    }
-
-    private func deleteRemoteBackupTables(
-        for userID: UUID,
-        client: SupabaseClient
-    ) async throws {
-        try await client
-            .from(Self.paymentHistoriesTable)
-            .delete()
-            .eq("user_id", value: userID)
-            .execute()
-
-        try await client
-            .from(Self.backupItemsTable)
-            .delete()
-            .eq("user_id", value: userID)
-            .execute()
-    }
-
-    private func fetchRemoteSubscriptions(
-        for userID: UUID,
-        client: SupabaseClient
-    ) async throws -> [BackupSubscriptionItemRow] {
-        try await client
-            .from(Self.backupItemsTable)
-            .select("""
-                id,
-                user_id,
-                name,
-                category,
-                amount,
-                is_amount_undecided,
-                currency_code,
-                billing_cycle_kind,
-                billing_cycle_days,
-                next_billing_date,
-                last_payment_date,
-                icon_key,
-                icon_color_key,
-                custom_category_name,
-                notifications_enabled,
-                is_auto_pay_enabled,
-                is_pinned,
-                is_active,
-                memo,
-                sort_order,
-                created_at,
-                updated_at
-                """)
-            .eq("user_id", value: userID)
-            .execute()
-            .value
-    }
-
-    private func fetchRemotePaymentHistories(
-        for userID: UUID,
-        client: SupabaseClient
-    ) async throws -> [BackupPaymentHistoryRow] {
-        try await client
-            .from(Self.paymentHistoriesTable)
-            .select("""
-                user_id,
-                subscription_id,
-                paid_at,
-                scheduled_date,
-                amount_snapshot,
-                currency_code,
-                is_auto_pay,
-                status,
-                created_at,
-                updated_at
-                """)
-            .eq("user_id", value: userID)
-            .eq("status", value: "paid")
-            .execute()
-            .value
     }
 
     private func buildSubscriptions(
@@ -991,13 +739,11 @@ public final class SettingsViewModel: ObservableObject {
 
     private func makeBackupSubscriptionItemRow(
         from subscription: Subscription,
-        userID: UUID,
         sortOrder: Int
     ) -> BackupSubscriptionItemRow {
         let billingCycle = flattenBillingCycle(subscription.billingCycle)
         return BackupSubscriptionItemRow(
             id: subscription.id,
-            user_id: userID,
             name: subscription.name,
             category: subscription.category.rawValue,
             amount: subscription.amount,
@@ -1022,8 +768,7 @@ public final class SettingsViewModel: ObservableObject {
     }
 
     private func makePaymentHistoryRows(
-        from subscription: Subscription,
-        userID: UUID
+        from subscription: Subscription
     ) -> [BackupPaymentHistoryRow] {
         let paidDates = Array(
             Set(
@@ -1034,7 +779,6 @@ public final class SettingsViewModel: ObservableObject {
 
         return paidDates.map { paidAt in
             BackupPaymentHistoryRow(
-                user_id: userID,
                 subscription_id: subscription.id,
                 paid_at: paidAt,
                 scheduled_date: paidAt,
@@ -1178,6 +922,22 @@ public final class SettingsViewModel: ObservableObject {
         return digest.map { String(format: "%02x", $0) }.joined()
     }
 
+    // 서버가 code_challenge 로 S256(base64url) 만 받으므로 그 규격에 맞춤
+    private static func randomCodeVerifier() -> String {
+        base64URLEncoded(Data(SymmetricKey(size: .bits256).withUnsafeBytes { Array($0) }))
+    }
+
+    private static func codeChallenge(for verifier: String) -> String {
+        base64URLEncoded(Data(SHA256.hash(data: Data(verifier.utf8))))
+    }
+
+    private static func base64URLEncoded(_ data: Data) -> String {
+        data.base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+    }
+
     private static func randomNonceString(length: Int = 32) -> String {
         precondition(length > 0)
         let charset = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
@@ -1207,8 +967,16 @@ public final class SettingsViewModel: ObservableObject {
     }
 }
 
-private extension String {
-    var nilIfEmpty: String? {
-        isEmpty ? nil : self
+@MainActor
+private final class WebAuthPresentationContext: NSObject, ASWebAuthenticationPresentationContextProviding {
+    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        #if os(iOS)
+        let windows = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+        return windows.first(where: \.isKeyWindow) ?? windows.first ?? ASPresentationAnchor()
+        #else
+        return NSApplication.shared.keyWindow ?? ASPresentationAnchor()
+        #endif
     }
 }
