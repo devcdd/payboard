@@ -1,4 +1,5 @@
 import AppIntents
+import Domain
 import SwiftUI
 import WidgetKit
 #if canImport(UIKit)
@@ -9,21 +10,33 @@ private enum WidgetSharedStore {
     nonisolated static let appGroupID = "group.kr.co.cdd.PayBoardiOS"
     nonisolated static let dataKey = "widget.snapshot.subscriptions.v1"
 
-    nonisolated static func subscriptions() -> [WidgetSubscription] {
+    nonisolated static func subscriptions(asOf date: Date = .now) -> [WidgetSubscription] {
         guard let defaults = UserDefaults(suiteName: appGroupID),
               let data = defaults.data(forKey: dataKey) else {
             return []
         }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        return (try? decoder.decode([WidgetSubscription].self, from: data)) ?? []
+        let rows = (try? decoder.decode([WidgetSubscription].self, from: data)) ?? []
+        return rows.map { $0.projected(asOf: date) }
+    }
+
+    // 앱이 깨어나지 않아도 매일 0시 엔트리에서 결제일과 남은 일수를 다시 계산하도록 일주일치를 미리 만든다
+    nonisolated static func dailyEntryDates(from now: Date = .now, days: Int = 7) -> [Date] {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: now)
+        return [now] + (1...days).compactMap { calendar.date(byAdding: .day, value: $0, to: today) }
     }
 }
 
 private struct WidgetSubscription: Codable, Identifiable {
     let id: String
     let name: String
-    let nextBillingDate: Date
+    var nextBillingDate: Date
+    // 이전 버전 앱이 저장한 스냅샷에는 없으므로 optional
+    let billingCycle: BillingCycle?
+    let billingAnchorDay: Int?
+    let autoAdvances: Bool?
     let amount: Double
     let currencyCode: String
     let isAmountUndecided: Bool
@@ -31,6 +44,21 @@ private struct WidgetSubscription: Codable, Identifiable {
     let iconSystemSymbol: String?
     let iconColorKey: String?
     let iconPNGData: Data?
+
+    // 앱의 자동결제 처리와 같은 규칙으로, 결제일 당일부터 다음 회차를 보여준다. 실제 결제 기록은 앱이 열릴 때 남긴다
+    nonisolated func projected(asOf date: Date, calendar: Calendar = .current) -> WidgetSubscription {
+        guard autoAdvances == true, let billingCycle else { return self }
+        let today = calendar.startOfDay(for: date)
+        var copy = self
+        var anchorDay = billingAnchorDay
+        while calendar.startOfDay(for: copy.nextBillingDate) <= today {
+            anchorDay = BillingDateCalculator.resolvedAnchorDay(for: copy.nextBillingDate, anchorDay: anchorDay, calendar: calendar)
+            let next = BillingDateCalculator.advance(from: copy.nextBillingDate, cycle: billingCycle, anchorDay: anchorDay, calendar: calendar)
+            guard next > copy.nextBillingDate else { break }
+            copy.nextBillingDate = next
+        }
+        return copy
+    }
 }
 
 private struct EarliestThreeEntry: TimelineEntry {
@@ -44,19 +72,18 @@ private struct EarliestThreeProvider: TimelineProvider {
     }
 
     func getSnapshot(in context: Context, completion: @escaping (EarliestThreeEntry) -> Void) {
-        completion(makeEntry())
+        completion(makeEntry(at: .now))
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<EarliestThreeEntry>) -> Void) {
-        let entry = makeEntry()
-        let nextUpdate = Calendar.current.date(byAdding: .minute, value: 30, to: .now) ?? .now.addingTimeInterval(1800)
-        completion(Timeline(entries: [entry], policy: .after(nextUpdate)))
+        let entries = WidgetSharedStore.dailyEntryDates().map(makeEntry(at:))
+        completion(Timeline(entries: entries, policy: .atEnd))
     }
 
-    private func makeEntry() -> EarliestThreeEntry {
-        let subscriptions = WidgetSharedStore.subscriptions()
+    private func makeEntry(at date: Date) -> EarliestThreeEntry {
+        let subscriptions = WidgetSharedStore.subscriptions(asOf: date)
             .sorted { $0.nextBillingDate < $1.nextBillingDate }
-        return EarliestThreeEntry(date: .now, subscriptions: Array(subscriptions.prefix(3)))
+        return EarliestThreeEntry(date: date, subscriptions: Array(subscriptions.prefix(3)))
     }
 }
 
@@ -122,7 +149,7 @@ private struct EarliestThreeWidgetView: View {
     }
 
     private var startOfToday: Date {
-        Calendar.current.startOfDay(for: .now)
+        Calendar.current.startOfDay(for: entry.date)
     }
 
     private func indicatorColor(for date: Date) -> Color? {
@@ -240,19 +267,18 @@ private struct SelectedSubscriptionProvider: AppIntentTimelineProvider {
     }
 
     func snapshot(for configuration: SelectedSubscriptionIntent, in context: Context) async -> SelectedSubscriptionEntry {
-        makeEntry(configuration: configuration)
+        makeEntry(configuration: configuration, at: .now)
     }
 
     func timeline(for configuration: SelectedSubscriptionIntent, in context: Context) async -> Timeline<SelectedSubscriptionEntry> {
-        let entry = makeEntry(configuration: configuration)
-        let nextUpdate = Calendar.current.date(byAdding: .minute, value: 30, to: .now) ?? .now.addingTimeInterval(1800)
-        return Timeline(entries: [entry], policy: .after(nextUpdate))
+        let entries = WidgetSharedStore.dailyEntryDates().map { makeEntry(configuration: configuration, at: $0) }
+        return Timeline(entries: entries, policy: .atEnd)
     }
 
-    private func makeEntry(configuration: SelectedSubscriptionIntent) -> SelectedSubscriptionEntry {
+    private func makeEntry(configuration: SelectedSubscriptionIntent, at date: Date) -> SelectedSubscriptionEntry {
         let selectedID = configuration.subscription?.id
-        let subscription = WidgetSharedStore.subscriptions().first { $0.id == selectedID }
-        return SelectedSubscriptionEntry(date: .now, subscription: subscription)
+        let subscription = WidgetSharedStore.subscriptions(asOf: date).first { $0.id == selectedID }
+        return SelectedSubscriptionEntry(date: date, subscription: subscription)
     }
 }
 
@@ -317,19 +343,18 @@ private struct CalendarProvider: TimelineProvider {
     }
 
     func getSnapshot(in context: Context, completion: @escaping (CalendarEntry) -> Void) {
-        completion(makeEntry())
+        completion(makeEntry(at: .now))
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<CalendarEntry>) -> Void) {
-        let entry = makeEntry()
-        let nextUpdate = Calendar.current.startOfDay(for: .now.addingTimeInterval(86400))
-        completion(Timeline(entries: [entry], policy: .after(nextUpdate)))
+        let entries = WidgetSharedStore.dailyEntryDates().map(makeEntry(at:))
+        completion(Timeline(entries: entries, policy: .atEnd))
     }
 
-    private func makeEntry() -> CalendarEntry {
+    private func makeEntry(at date: Date) -> CalendarEntry {
         let calendar = Calendar.current
-        let start = monthStart(from: .now)
-        let subscriptions = WidgetSharedStore.subscriptions()
+        let start = monthStart(from: date)
+        let subscriptions = WidgetSharedStore.subscriptions(asOf: date)
         let marked = Set(subscriptions.compactMap { subscription -> Int? in
             guard calendar.isDate(subscription.nextBillingDate, equalTo: start, toGranularity: .month),
                   calendar.isDate(subscription.nextBillingDate, equalTo: start, toGranularity: .year) else {
@@ -337,7 +362,7 @@ private struct CalendarProvider: TimelineProvider {
             }
             return calendar.component(.day, from: subscription.nextBillingDate)
         })
-        return CalendarEntry(date: .now, monthStart: start, markedDays: marked)
+        return CalendarEntry(date: date, monthStart: start, markedDays: marked)
     }
 
     private func monthStart(from date: Date) -> Date {
@@ -353,25 +378,24 @@ private struct WeekRangeProvider: TimelineProvider {
     }
 
     func getSnapshot(in context: Context, completion: @escaping (WeekRangeEntry) -> Void) {
-        completion(makeEntry())
+        completion(makeEntry(at: .now))
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<WeekRangeEntry>) -> Void) {
-        let entry = makeEntry()
-        let nextUpdate = Calendar.current.startOfDay(for: .now.addingTimeInterval(86400))
-        completion(Timeline(entries: [entry], policy: .after(nextUpdate)))
+        let entries = WidgetSharedStore.dailyEntryDates().map(makeEntry(at:))
+        completion(Timeline(entries: entries, policy: .atEnd))
     }
 
-    private func makeEntry() -> WeekRangeEntry {
+    private func makeEntry(at date: Date) -> WeekRangeEntry {
         let calendar = Calendar.current
-        let start = startOfWeek(from: .now)
+        let start = startOfWeek(from: date)
         let end = calendar.date(byAdding: .day, value: (weekCount * 7) - 1, to: start) ?? start
         let markedDates = Set(
-            WidgetSharedStore.subscriptions()
+            WidgetSharedStore.subscriptions(asOf: date)
                 .map { calendar.startOfDay(for: $0.nextBillingDate) }
                 .filter { $0 >= start && $0 <= end }
         )
-        return WeekRangeEntry(date: .now, startOfWeek: start, weekCount: weekCount, markedDates: markedDates)
+        return WeekRangeEntry(date: date, startOfWeek: start, weekCount: weekCount, markedDates: markedDates)
     }
 
     private func startOfWeek(from date: Date) -> Date {
@@ -423,13 +447,13 @@ private struct CalendarWidgetView: View {
 
     private var isCurrentMonthToday: Bool {
         let calendar = Calendar.current
-        return calendar.isDate(entry.monthStart, equalTo: .now, toGranularity: .month)
-            && calendar.isDate(entry.monthStart, equalTo: .now, toGranularity: .year)
+        return calendar.isDate(entry.monthStart, equalTo: entry.date, toGranularity: .month)
+            && calendar.isDate(entry.monthStart, equalTo: entry.date, toGranularity: .year)
     }
 
     private var todayDayNumber: Int? {
         guard isCurrentMonthToday else { return nil }
-        return Calendar.current.component(.day, from: .now)
+        return Calendar.current.component(.day, from: entry.date)
     }
 
     var body: some View {
@@ -503,7 +527,7 @@ private struct WeekRangeCalendarWidgetView: View {
     }
 
     private func isToday(_ date: Date) -> Bool {
-        Calendar.current.isDate(date, inSameDayAs: .now)
+        Calendar.current.isDate(date, inSameDayAs: entry.date)
     }
 
     var body: some View {

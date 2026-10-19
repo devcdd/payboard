@@ -19,6 +19,9 @@ enum WidgetSnapshotStore {
                 id: subscription.id.uuidString,
                 name: subscription.name,
                 nextBillingDate: subscription.nextBillingDate,
+                billingCycle: subscription.billingCycle,
+                billingAnchorDay: subscription.billingAnchorDay,
+                autoAdvances: subscription.isAutoPayEnabled && subscription.isActive,
                 amount: NSDecimalNumber(decimal: subscription.amount).doubleValue,
                 currencyCode: subscription.currencyCode,
                 isAmountUndecided: subscription.isAmountUndecided,
@@ -63,6 +66,10 @@ struct WidgetSubscriptionSnapshot: Codable, Sendable {
     let id: String
     let name: String
     let nextBillingDate: Date
+    let billingCycle: BillingCycle
+    let billingAnchorDay: Int?
+    /// 위젯이 앱을 열기 전에도 지난 결제일을 다음 회차로 넘겨 보여줄지 여부(자동결제 && 활성)
+    let autoAdvances: Bool
     let amount: Double
     let currencyCode: String
     let isAmountUndecided: Bool
