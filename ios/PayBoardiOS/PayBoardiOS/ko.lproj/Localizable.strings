@@ -248,3 +248,8 @@
 "icon.name.google_cloud" = "구글 클라우드";
 "icon.name.google_playpass" = "구글 플레이 패스";
 "icon.name.tving" = "티빙";
+"service_editor.ai.button" = "AI로 정보 입력하기";
+"service_editor.ai.placeholder" = "예: 넷플릭스 매달 25일 17,000원 자동결제";
+"service_editor.ai.footer" = "말로 입력하려면 키보드의 마이크 버튼을 누르세요.";
+"service_editor.ai.fill" = "채우기";
+"service_editor.ai.error" = "정보를 읽지 못했습니다. 다시 설명해 주세요.";

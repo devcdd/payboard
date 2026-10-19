@@ -29,6 +29,10 @@ public struct ServiceEditorView: View {
     @State private var isPresentingIconSearch = false
     @State private var isSaving = false
     @State private var validationMessageKey: String?
+    @State private var isPresentingAIInput = false
+    @State private var aiInputText = ""
+    @State private var isParsingAIInput = false
+    @State private var aiInputFailed = false
     @FocusState private var focusedField: FocusedField?
 
     private let allIcons = PresetIconCatalog.all()
@@ -64,6 +68,16 @@ public struct ServiceEditorView: View {
     public var body: some View {
         NavigationStack {
             Form {
+                if isAIInputAvailable {
+                    Section {
+                        Button {
+                            isPresentingAIInput = true
+                        } label: {
+                            Label("service_editor.ai.button", systemImage: "apple.intelligence")
+                        }
+                    }
+                }
+
                 Section("service_editor.section.basic") {
                     nameField
                     Picker("service_editor.category", selection: $category) {
@@ -190,6 +204,10 @@ public struct ServiceEditorView: View {
             .sheet(isPresented: $isPresentingIconSearch) {
                 iconSearchSheet
             }
+            .sheet(isPresented: $isPresentingAIInput) {
+                aiInputSheet
+                    .presentationDetents([.medium])
+            }
         }
     }
 
@@ -310,6 +328,96 @@ public struct ServiceEditorView: View {
             .searchable(text: $query, prompt: Text("service_editor.icon.search"))
         }
     }
+
+    private var isAIInputAvailable: Bool {
+        #if canImport(FoundationModels)
+        if #available(iOS 26, macOS 26, *) {
+            return original == nil && SubscriptionDraftParser.isAvailable
+        }
+        #endif
+        return false
+    }
+
+    private var aiInputSheet: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("service_editor.ai.placeholder", text: $aiInputText, axis: .vertical)
+                        .lineLimit(3...6)
+                } footer: {
+                    if aiInputFailed {
+                        Text("service_editor.ai.error")
+                            .foregroundStyle(Color.payDanger)
+                    } else {
+                        Text("service_editor.ai.footer")
+                    }
+                }
+            }
+            .navigationTitle("service_editor.ai.button")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("common.cancel") {
+                        isPresentingAIInput = false
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    if isParsingAIInput {
+                        ProgressView()
+                    } else {
+                        Button("service_editor.ai.fill") {
+                            Task {
+                                await fillFromAIInput()
+                            }
+                        }
+                        .disabled(aiInputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+            }
+        }
+    }
+
+    private func fillFromAIInput() async {
+        #if canImport(FoundationModels)
+        guard #available(iOS 26, macOS 26, *), !isParsingAIInput else { return }
+        isParsingAIInput = true
+        aiInputFailed = false
+        defer { isParsingAIInput = false }
+        do {
+            apply(try await SubscriptionDraftParser.parse(aiInputText))
+            isPresentingAIInput = false
+        } catch {
+            aiInputFailed = true
+        }
+        #endif
+    }
+
+    #if canImport(FoundationModels)
+    @available(iOS 26, macOS 26, *)
+    private func apply(_ draft: SubscriptionDraft) {
+        name = draft.name
+        validationMessageKey = nil
+        category = SubscriptionCategory(rawValue: draft.category.rawValue) ?? .other
+        if let amount = draft.amount, amount > 0 {
+            isAmountUndecided = false
+            amountText = Self.groupedAmountText(String(amount))
+        }
+        billingCycle = draft.cycle == .yearly ? .yearly : .monthly
+        if let day = draft.billingDay {
+            nextBillingDate = BillingDateCalculator.upcoming(day: day, month: draft.billingMonth, cycle: billingCycle)
+        }
+        isAutoPayEnabled = draft.isAutoPay
+        if let draftMemo = draft.memo, !draftMemo.isEmpty {
+            memo = draftMemo
+        }
+        if let icon = PresetIconCatalog.search(draft.name).first {
+            selectedIconKey = icon.key
+            query = PresetIconCatalog.localizedDisplayName(for: icon)
+        }
+    }
+    #endif
 
     @ViewBuilder
     private var nameField: some View {

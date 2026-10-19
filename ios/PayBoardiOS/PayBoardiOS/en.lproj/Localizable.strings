@@ -248,3 +248,8 @@
 "icon.name.google_cloud" = "Google Cloud";
 "icon.name.google_playpass" = "Google Play Pass";
 "icon.name.tving" = "TVING";
+"service_editor.ai.button" = "Fill in with AI";
+"service_editor.ai.placeholder" = "e.g. Netflix, 17,000 won on the 25th every month, auto-pay";
+"service_editor.ai.footer" = "Tap the microphone on the keyboard to dictate.";
+"service_editor.ai.fill" = "Fill";
+"service_editor.ai.error" = "Couldn't read the details. Please describe it again.";
