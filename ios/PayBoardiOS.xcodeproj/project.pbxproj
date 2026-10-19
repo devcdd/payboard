@@ -10,6 +10,7 @@
 		6E21022D2F517B4C00024992 /* AppCore in Frameworks */ = {isa = PBXBuildFile; productRef = 6E21022C2F517B4C00024992 /* AppCore */; };
 		6E2102352F517B4C00024992 /* Features in Frameworks */ = {isa = PBXBuildFile; productRef = 6E2102342F517B4C00024992 /* Features */; };
 		A1B2C3112F60000100024992 /* Domain in Frameworks */ = {isa = PBXBuildFile; productRef = A1B2C3102F60000100024992 /* Domain */; };
+		A1B2C3132F60000100024992 /* DesignSystem in Frameworks */ = {isa = PBXBuildFile; productRef = A1B2C3122F60000100024992 /* DesignSystem */; };
 		6ED761ED2F5C54850079FF0C /* Payboard.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = 6ED761EC2F5C54850079FF0C /* Payboard.xcconfig */; };
 		A1B2C3092F60000100024992 /* PayBoardWidgets.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = A1B2C3012F60000100024992 /* PayBoardWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
@@ -112,6 +113,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A1B2C3112F60000100024992 /* Domain in Frameworks */,
+				A1B2C3132F60000100024992 /* DesignSystem in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -242,6 +244,7 @@
 			name = PayBoardWidgets;
 			packageProductDependencies = (
 				A1B2C3102F60000100024992 /* Domain */,
+				A1B2C3122F60000100024992 /* DesignSystem */,
 			);
 			productName = PayBoardWidgets;
 			productReference = A1B2C3012F60000100024992 /* PayBoardWidgets.appex */;
@@ -791,6 +794,10 @@
 		A1B2C3102F60000100024992 /* Domain */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = Domain;
+		};
+		A1B2C3122F60000100024992 /* DesignSystem */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = DesignSystem;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

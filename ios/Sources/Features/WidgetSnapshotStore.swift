@@ -28,7 +28,8 @@ enum WidgetSnapshotStore {
                 iconAssetName: presetIcon?.assetName,
                 iconSystemSymbol: presetIcon?.systemSymbol,
                 iconColorKey: subscription.iconColorKey,
-                iconPNGData: widgetIconPNGData(for: presetIcon?.assetName)
+                iconPNGData: widgetIconPNGData(for: presetIcon?.assetName),
+                paymentDates: paymentDates(for: subscription)
             )
         }
 
@@ -44,6 +45,17 @@ enum WidgetSnapshotStore {
         #if canImport(WidgetKit)
         WidgetCenter.shared.reloadAllTimelines()
         #endif
+    }
+
+    // 앱 캘린더와 같이 결제 기록이 없으면 마지막 결제일 하나만 결제 완료로 본다
+    private static func paymentDates(for subscription: Subscription) -> [Date] {
+        if !subscription.paymentHistoryDates.isEmpty {
+            return subscription.paymentHistoryDates
+        }
+        if let last = subscription.lastPaymentDate {
+            return [last]
+        }
+        return []
     }
 
     private static func widgetIconPNGData(for assetName: String?) -> Data? {
@@ -77,4 +89,5 @@ struct WidgetSubscriptionSnapshot: Codable, Sendable {
     let iconSystemSymbol: String?
     let iconColorKey: String?
     let iconPNGData: Data?
+    let paymentDates: [Date]
 }

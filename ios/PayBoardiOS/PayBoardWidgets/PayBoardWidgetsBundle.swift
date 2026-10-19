@@ -1,4 +1,5 @@
 import AppIntents
+import DesignSystem
 import Domain
 import SwiftUI
 import WidgetKit
@@ -27,6 +28,30 @@ private enum WidgetSharedStore {
         let today = calendar.startOfDay(for: now)
         return [now] + (1...days).compactMap { calendar.date(byAdding: .day, value: $0, to: today) }
     }
+
+    // 앱 캘린더와 같은 규칙: 다음 결제일은 남은 일수에 따라 색이 바뀌고, 결제 기록이 있는 날은 결제 완료가 우선한다
+    nonisolated static func markers(
+        for subscriptions: [WidgetSubscription],
+        from start: Date,
+        to end: Date,
+        today: Date
+    ) -> [Date: PaymentCalendarMarker] {
+        let calendar = Calendar.current
+        var result: [Date: PaymentCalendarMarker] = [:]
+        for subscription in subscriptions {
+            let billingDay = calendar.startOfDay(for: subscription.nextBillingDate)
+            if billingDay >= start && billingDay <= end {
+                let marker = PaymentCalendarMarker.upcoming(billingDate: billingDay, today: today, calendar: calendar)
+                result[billingDay] = marker.merged(with: result[billingDay])
+            }
+            for paymentDate in subscription.paymentDates ?? [] {
+                let paymentDay = calendar.startOfDay(for: paymentDate)
+                guard paymentDay >= start && paymentDay <= end else { continue }
+                result[paymentDay] = PaymentCalendarMarker.paid.merged(with: result[paymentDay])
+            }
+        }
+        return result
+    }
 }
 
 private struct WidgetSubscription: Codable, Identifiable {
@@ -44,6 +69,7 @@ private struct WidgetSubscription: Codable, Identifiable {
     let iconSystemSymbol: String?
     let iconColorKey: String?
     let iconPNGData: Data?
+    let paymentDates: [Date]?
 
     // 앱의 자동결제 처리와 같은 규칙으로, 결제일 당일부터 다음 회차를 보여준다. 실제 결제 기록은 앱이 열릴 때 남긴다
     nonisolated func projected(asOf date: Date, calendar: Calendar = .current) -> WidgetSubscription {
@@ -91,24 +117,6 @@ private struct EarliestThreeWidgetView: View {
     @Environment(\.widgetFamily) private var family
     let entry: EarliestThreeEntry
 
-    private func iconTintColor(for key: String?) -> Color {
-        switch key {
-        case "red": return .red
-        case "orange": return .orange
-        case "yellow": return .yellow
-        case "green": return .green
-        case "mint": return .mint
-        case "teal": return .teal
-        case "cyan": return .cyan
-        case "indigo": return .indigo
-        case "purple": return .purple
-        case "pink": return .pink
-        case "brown": return .brown
-        case "gray": return .gray
-        default: return .blue
-        }
-    }
-
     @ViewBuilder
     private func subscriptionIcon(_ item: WidgetSubscription) -> some View {
         if let pngData = item.iconPNGData,
@@ -128,7 +136,7 @@ private struct EarliestThreeWidgetView: View {
             Image(systemName: item.iconSystemSymbol ?? "app.badge")
                 .font(.caption.weight(.semibold))
                 .frame(width: 18, height: 18)
-                .foregroundStyle(iconTintColor(for: item.iconColorKey))
+                .foregroundStyle(Color.payIconTint(for: item.iconColorKey ?? ""))
         }
     }
 
@@ -153,11 +161,8 @@ private struct EarliestThreeWidgetView: View {
     }
 
     private func indicatorColor(for date: Date) -> Color? {
-        let day = Calendar.current.startOfDay(for: date)
-        let diff = Calendar.current.dateComponents([.day], from: startOfToday, to: day).day ?? Int.max
-        if diff <= 1 { return .red.opacity(0.95) }
-        if diff <= 3 { return .yellow.opacity(0.95) }
-        return nil
+        let marker = PaymentCalendarMarker.upcoming(billingDate: date, today: startOfToday)
+        return marker == .scheduled ? nil : marker.dotColor
     }
 
     @ViewBuilder
@@ -182,7 +187,7 @@ private struct EarliestThreeWidgetView: View {
             if entry.subscriptions.isEmpty {
                 Text("표시할 항목이 없습니다")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.payMuted)
                     .padding(.top, 2)
             } else {
                 VStack(alignment: .leading, spacing: 6) {
@@ -195,7 +200,7 @@ private struct EarliestThreeWidgetView: View {
                             if family != .systemSmall {
                                 Text(item.nextBillingDate.koreanDateText)
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.payMuted)
                             }
                             indicatorDot(for: item.nextBillingDate)
                         }
@@ -205,7 +210,7 @@ private struct EarliestThreeWidgetView: View {
         }
         .padding(.top, family == .systemSmall ? -2 : -6)
         .padding(.bottom, 1)
-        .containerBackground(.fill.tertiary, for: .widget)
+        .containerBackground(Color.payCard, for: .widget)
     }
 }
 
@@ -295,15 +300,15 @@ private struct SelectedSubscriptionWidgetView: View {
                     .lineLimit(1)
                 Text("다음 결제일: \(item.nextBillingDate.koreanDateText)")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.payMuted)
             } else {
                 Text("항목을 선택해 주세요")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.payMuted)
             }
             Spacer(minLength: 0)
         }
-        .containerBackground(.fill.tertiary, for: .widget)
+        .containerBackground(Color.payCard, for: .widget)
     }
 }
 
@@ -327,19 +332,19 @@ struct SelectedSubscriptionWidget: Widget {
 private struct CalendarEntry: TimelineEntry {
     let date: Date
     let monthStart: Date
-    let markedDays: Set<Int>
+    let markers: [Date: PaymentCalendarMarker]
 }
 
 private struct WeekRangeEntry: TimelineEntry {
     let date: Date
     let startOfWeek: Date
     let weekCount: Int
-    let markedDates: Set<Date>
+    let markers: [Date: PaymentCalendarMarker]
 }
 
 private struct CalendarProvider: TimelineProvider {
     func placeholder(in context: Context) -> CalendarEntry {
-        CalendarEntry(date: .now, monthStart: monthStart(from: .now), markedDays: [])
+        CalendarEntry(date: .now, monthStart: monthStart(from: .now), markers: [:])
     }
 
     func getSnapshot(in context: Context, completion: @escaping (CalendarEntry) -> Void) {
@@ -354,15 +359,16 @@ private struct CalendarProvider: TimelineProvider {
     private func makeEntry(at date: Date) -> CalendarEntry {
         let calendar = Calendar.current
         let start = monthStart(from: date)
-        let subscriptions = WidgetSharedStore.subscriptions(asOf: date)
-        let marked = Set(subscriptions.compactMap { subscription -> Int? in
-            guard calendar.isDate(subscription.nextBillingDate, equalTo: start, toGranularity: .month),
-                  calendar.isDate(subscription.nextBillingDate, equalTo: start, toGranularity: .year) else {
-                return nil
-            }
-            return calendar.component(.day, from: subscription.nextBillingDate)
-        })
-        return CalendarEntry(date: date, monthStart: start, markedDays: marked)
+        let end = calendar.dateInterval(of: .month, for: start).flatMap {
+            calendar.date(byAdding: .day, value: -1, to: $0.end)
+        } ?? start
+        let markers = WidgetSharedStore.markers(
+            for: WidgetSharedStore.subscriptions(asOf: date),
+            from: start,
+            to: end,
+            today: date
+        )
+        return CalendarEntry(date: date, monthStart: start, markers: markers)
     }
 
     private func monthStart(from date: Date) -> Date {
@@ -374,7 +380,7 @@ private struct WeekRangeProvider: TimelineProvider {
     let weekCount: Int
 
     func placeholder(in context: Context) -> WeekRangeEntry {
-        WeekRangeEntry(date: .now, startOfWeek: startOfWeek(from: .now), weekCount: weekCount, markedDates: [])
+        WeekRangeEntry(date: .now, startOfWeek: startOfWeek(from: .now), weekCount: weekCount, markers: [:])
     }
 
     func getSnapshot(in context: Context, completion: @escaping (WeekRangeEntry) -> Void) {
@@ -390,12 +396,13 @@ private struct WeekRangeProvider: TimelineProvider {
         let calendar = Calendar.current
         let start = startOfWeek(from: date)
         let end = calendar.date(byAdding: .day, value: (weekCount * 7) - 1, to: start) ?? start
-        let markedDates = Set(
-            WidgetSharedStore.subscriptions(asOf: date)
-                .map { calendar.startOfDay(for: $0.nextBillingDate) }
-                .filter { $0 >= start && $0 <= end }
+        let markers = WidgetSharedStore.markers(
+            for: WidgetSharedStore.subscriptions(asOf: date),
+            from: start,
+            to: end,
+            today: date
         )
-        return WeekRangeEntry(date: date, startOfWeek: start, weekCount: weekCount, markedDates: markedDates)
+        return WeekRangeEntry(date: date, startOfWeek: start, weekCount: weekCount, markers: markers)
     }
 
     private func startOfWeek(from date: Date) -> Date {
@@ -407,15 +414,6 @@ private struct WeekRangeProvider: TimelineProvider {
     }
 }
 
-private enum WidgetCalendarStyle {
-    static let widgetBackground = Color(red: 0.08, green: 0.09, blue: 0.11)
-    static let weekday = Color.white.opacity(0.70)
-    static let dayText = Color.white.opacity(0.94)
-    static let accent = Color(red: 0.04, green: 0.47, blue: 0.83)
-    static let selectedFill = accent.opacity(0.22)
-    static let markerDot = accent.opacity(0.85)
-}
-
 private func koreanWeekdaySymbols(firstWeekday: Int) -> [String] {
     let base = ["일", "월", "화", "수", "목", "금", "토"]
     let shift = max(0, min(6, firstWeekday - 1))
@@ -423,162 +421,146 @@ private func koreanWeekdaySymbols(firstWeekday: Int) -> [String] {
     return Array(base[shift...]) + Array(base[..<shift])
 }
 
-private struct CalendarWidgetView: View {
-    @Environment(\.widgetFamily) private var family
-    let entry: CalendarEntry
+// 앱 결제 캘린더의 요일 헤더와 같은 스타일
+private struct WidgetWeekdayHeader: View {
+    let font: Font
 
-    private var weekdaySymbols: [String] {
-        koreanWeekdaySymbols(firstWeekday: Calendar.current.firstWeekday)
-    }
-
-    private var dayCells: [Int?] {
-        let calendar = Calendar.current
-        guard let daysRange = calendar.range(of: .day, in: .month, for: entry.monthStart) else {
-            return Array(repeating: nil, count: 42)
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(Array(koreanWeekdaySymbols(firstWeekday: Calendar.current.firstWeekday).enumerated()), id: \.offset) { _, symbol in
+                Text(symbol)
+                    .font(font.weight(.semibold))
+                    .foregroundStyle(Color.payMuted)
+                    .frame(maxWidth: .infinity)
+            }
         }
-
-        let firstDayWeekday = calendar.component(.weekday, from: entry.monthStart)
-        let leading = (firstDayWeekday - calendar.firstWeekday + 7) % 7
-        var cells: [Int?] = Array(repeating: nil, count: leading)
-        cells.append(contentsOf: daysRange.map { Optional($0) })
-        cells.append(contentsOf: Array(repeating: nil, count: max(0, 42 - cells.count)))
-        return Array(cells.prefix(42))
     }
+}
 
-    private var isCurrentMonthToday: Bool {
-        let calendar = Calendar.current
-        return calendar.isDate(entry.monthStart, equalTo: entry.date, toGranularity: .month)
-            && calendar.isDate(entry.monthStart, equalTo: entry.date, toGranularity: .year)
-    }
+// 앱 결제 캘린더의 날짜 셀과 같은 스타일. 위젯에서는 오늘이 곧 선택된 날짜다
+private struct WidgetCalendarDayCell: View {
+    let date: Date
+    let isToday: Bool
+    let isInDisplayedMonth: Bool
+    let marker: PaymentCalendarMarker?
+    let circleSize: CGFloat
+    let font: Font
 
-    private var todayDayNumber: Int? {
-        guard isCurrentMonthToday else { return nil }
-        return Calendar.current.component(.day, from: entry.date)
+    private var textColor: Color {
+        if isToday {
+            return .payAccent
+        }
+        if !isInDisplayedMonth {
+            return Color.payMuted.opacity(0.55)
+        }
+        return .primary
     }
 
     var body: some View {
-        GeometryReader { proxy in
-            let spacing: CGFloat = family == .systemLarge ? 8 : 6
-            let availableHeight = proxy.size.height - (spacing * 6)
-            let rowHeight = max(family == .systemLarge ? 36 : 24, availableHeight / 7)
-            let circleSize = family == .systemLarge ? 28.0 : 22.0
+        VStack(spacing: 2) {
+            Text("\(Calendar.current.component(.day, from: date))")
+                .font(font.weight(isToday ? .bold : .regular))
+                .foregroundStyle(textColor)
+                .frame(width: circleSize, height: circleSize)
+                .background(
+                    Circle()
+                        .fill(isToday ? Color.payAccent.opacity(0.22) : Color.clear)
+                )
+            Circle()
+                .fill(marker?.dotColor ?? Color.clear)
+                .frame(width: 5, height: 5)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
 
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: spacing), count: 7), spacing: spacing) {
-                ForEach(Array(weekdaySymbols.enumerated()), id: \.offset) { _, symbol in
-                    Text(symbol)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(WidgetCalendarStyle.weekday)
-                        .frame(maxWidth: .infinity, minHeight: rowHeight * 0.7)
-                }
+private struct CalendarWidgetView: View {
+    let entry: CalendarEntry
 
-                ForEach(Array(dayCells.enumerated()), id: \.offset) { _, day in
-                    if let day {
-                        let isToday = todayDayNumber == day
-                        VStack(spacing: 2) {
-                            Text("\(day)")
-                                .font((family == .systemLarge ? Font.subheadline : Font.caption).weight(isToday ? .semibold : .regular))
-                                .foregroundStyle(isToday ? WidgetCalendarStyle.accent : WidgetCalendarStyle.dayText)
-                                .frame(width: circleSize, height: circleSize)
-                                .background(
-                                    Circle()
-                                        .fill(isToday ? WidgetCalendarStyle.selectedFill : Color.clear)
-                                )
-                            if entry.markedDays.contains(day) {
-                                Circle()
-                                    .fill(WidgetCalendarStyle.markerDot)
-                                    .frame(width: 5, height: 5)
-                            } else {
-                                Color.clear
-                                    .frame(width: 5, height: 5)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, minHeight: rowHeight)
-                    } else {
-                        Color.clear
-                            .frame(maxWidth: .infinity, minHeight: rowHeight)
+    // 앱처럼 앞뒤 달 날짜로 첫 주와 마지막 주를 채운다
+    private var weeks: [[Date]] {
+        let calendar = Calendar.current
+        guard let daysRange = calendar.range(of: .day, in: .month, for: entry.monthStart) else {
+            return []
+        }
+        let firstWeekday = calendar.component(.weekday, from: entry.monthStart)
+        let leading = (firstWeekday - calendar.firstWeekday + 7) % 7
+        let total = leading + daysRange.count
+        let cellCount = total + (7 - total % 7) % 7
+        let days = (0..<cellCount).compactMap { offset in
+            calendar.date(byAdding: .day, value: offset - leading, to: entry.monthStart)
+        }
+        return stride(from: 0, to: days.count, by: 7).map { Array(days[$0..<min($0 + 7, days.count)]) }
+    }
+
+    private var monthTitle: String {
+        entry.monthStart.formatted(.dateTime.year().month(.abbreviated).locale(Locale(identifier: "ko_KR")))
+    }
+
+    var body: some View {
+        let calendar = Calendar.current
+        VStack(spacing: PayBoardSpacing.sm) {
+            Text(monthTitle)
+                .font(.headline.weight(.semibold))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, PayBoardSpacing.xs)
+
+            WidgetWeekdayHeader(font: .caption)
+                .padding(.top, PayBoardSpacing.xs)
+
+            ForEach(Array(weeks.enumerated()), id: \.offset) { _, week in
+                HStack(spacing: 0) {
+                    ForEach(week, id: \.self) { day in
+                        WidgetCalendarDayCell(
+                            date: day,
+                            isToday: calendar.isDate(day, inSameDayAs: entry.date),
+                            isInDisplayedMonth: calendar.isDate(day, equalTo: entry.monthStart, toGranularity: .month),
+                            marker: entry.markers[calendar.startOfDay(for: day)],
+                            circleSize: 30,
+                            font: .subheadline
+                        )
                     }
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .containerBackground(WidgetCalendarStyle.widgetBackground, for: .widget)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .containerBackground(Color.payCard, for: .widget)
     }
 }
 
 private struct WeekRangeCalendarWidgetView: View {
-    @Environment(\.widgetFamily) private var family
     let entry: WeekRangeEntry
 
-    private var weekdaySymbols: [String] {
-        koreanWeekdaySymbols(firstWeekday: Calendar.current.firstWeekday)
-    }
-
-    private var days: [Date] {
+    private var weeks: [[Date]] {
         let calendar = Calendar.current
-        return (0..<(entry.weekCount * 7)).compactMap { offset in
+        let days = (0..<(entry.weekCount * 7)).compactMap { offset in
             calendar.date(byAdding: .day, value: offset, to: entry.startOfWeek)
         }
-    }
-
-    private var weekRows: [[Date]] {
-        stride(from: 0, to: days.count, by: 7).map { start in
-            Array(days[start..<min(start + 7, days.count)])
-        }
-    }
-
-    private func isToday(_ date: Date) -> Bool {
-        Calendar.current.isDate(date, inSameDayAs: entry.date)
+        return stride(from: 0, to: days.count, by: 7).map { Array(days[$0..<min($0 + 7, days.count)]) }
     }
 
     var body: some View {
-        GeometryReader { proxy in
-            let spacing: CGFloat = family == .systemSmall ? 4 : 6
-            let totalRows = CGFloat(entry.weekCount + 1)
-            let availableHeight = proxy.size.height - (spacing * (totalRows - 1))
-            let rowHeight = max(family == .systemSmall ? 18 : 22, availableHeight / totalRows)
-            let circleSize = family == .systemSmall ? 20.0 : 24.0
+        let calendar = Calendar.current
+        VStack(spacing: entry.weekCount > 2 ? 2 : PayBoardSpacing.xs) {
+            WidgetWeekdayHeader(font: .caption2)
 
-            VStack(spacing: spacing) {
-                HStack(spacing: 4) {
-                    ForEach(Array(weekdaySymbols.enumerated()), id: \.offset) { _, symbol in
-                        Text(symbol)
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(WidgetCalendarStyle.weekday)
-                            .frame(maxWidth: .infinity, minHeight: rowHeight * 0.8)
-                    }
-                }
-
-                ForEach(Array(weekRows.enumerated()), id: \.offset) { _, week in
-                    HStack(spacing: 4) {
-                        ForEach(Array(week.enumerated()), id: \.offset) { _, day in
-                            let dayKey = Calendar.current.startOfDay(for: day)
-                            let isToday = isToday(day)
-                            VStack(spacing: 2) {
-                                Text(day.formatted(.dateTime.day()))
-                                    .font(.caption.weight(isToday ? .semibold : .regular))
-                                    .foregroundStyle(isToday ? WidgetCalendarStyle.accent : WidgetCalendarStyle.dayText)
-                                    .frame(width: circleSize, height: circleSize)
-                                    .background(
-                                        Circle()
-                                            .fill(isToday ? WidgetCalendarStyle.selectedFill : Color.clear)
-                                    )
-                                if entry.markedDates.contains(dayKey) {
-                                    Circle()
-                                        .fill(WidgetCalendarStyle.markerDot)
-                                        .frame(width: 5, height: 5)
-                                } else {
-                                    Color.clear
-                                        .frame(width: 5, height: 5)
-                                }
-                            }
-                            .frame(maxWidth: .infinity, minHeight: rowHeight)
-                        }
+            ForEach(Array(weeks.enumerated()), id: \.offset) { _, week in
+                HStack(spacing: 0) {
+                    ForEach(week, id: \.self) { day in
+                        WidgetCalendarDayCell(
+                            date: day,
+                            isToday: calendar.isDate(day, inSameDayAs: entry.date),
+                            isInDisplayedMonth: true,
+                            marker: entry.markers[calendar.startOfDay(for: day)],
+                            circleSize: entry.weekCount > 2 ? 22 : 26,
+                            font: .caption
+                        )
                     }
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .containerBackground(WidgetCalendarStyle.widgetBackground, for: .widget)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .containerBackground(Color.payCard, for: .widget)
     }
 }
 

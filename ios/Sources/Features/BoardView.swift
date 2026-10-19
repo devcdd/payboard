@@ -1321,39 +1321,21 @@ public struct BoardView: View {
         return items
     }
 
-    private var calendarMarkerByDate: [String: CalendarMarker] {
-        var result: [String: CalendarMarker] = [:]
+    private var calendarMarkerByDate: [String: PaymentCalendarMarker] {
+        var result: [String: PaymentCalendarMarker] = [:]
         let calendar = Calendar.current
 
         for subscription in viewModel.subscriptions {
             if calendar.isDate(subscription.nextBillingDate, equalTo: displayedMonthStart, toGranularity: .month) {
                 let key = dateKey(for: subscription.nextBillingDate)
-                let nextMarker: CalendarMarker
-                if let urgency = billingUrgency(for: subscription) {
-                    switch urgency {
-                    case .warning:
-                        nextMarker = .warning
-                    case .critical:
-                        nextMarker = .critical
-                    }
-                } else {
-                    nextMarker = .scheduled
-                }
-                if let existing = result[key] {
-                    result[key] = existing.priority >= nextMarker.priority ? existing : nextMarker
-                } else {
-                    result[key] = nextMarker
-                }
+                let nextMarker = PaymentCalendarMarker.upcoming(billingDate: subscription.nextBillingDate, today: .now, calendar: calendar)
+                result[key] = nextMarker.merged(with: result[key])
             }
 
             for paymentDate in paymentHistoryDates(for: subscription) {
                 guard calendar.isDate(paymentDate, equalTo: displayedMonthStart, toGranularity: .month) else { continue }
                 let key = dateKey(for: paymentDate)
-                if let existing = result[key] {
-                    result[key] = existing.priority >= CalendarMarker.paid.priority ? existing : .paid
-                } else {
-                    result[key] = .paid
-                }
+                result[key] = PaymentCalendarMarker.paid.merged(with: result[key])
             }
         }
         return result
@@ -1790,39 +1772,6 @@ public struct BoardView: View {
             let generator = UIImpactFeedbackGenerator(style: .rigid)
             generator.impactOccurred()
             #endif
-        }
-    }
-
-    private enum CalendarMarker {
-        case scheduled
-        case warning
-        case critical
-        case paid
-
-        var dotColor: Color {
-            switch self {
-            case .scheduled:
-                return Color.payAccent.opacity(0.85)
-            case .warning:
-                return Color.yellow.opacity(0.95)
-            case .critical:
-                return Color.red.opacity(0.95)
-            case .paid:
-                return Color.green.opacity(0.95)
-            }
-        }
-
-        var priority: Int {
-            switch self {
-            case .scheduled:
-                return 0
-            case .warning:
-                return 1
-            case .critical:
-                return 2
-            case .paid:
-                return 3
-            }
         }
     }
 
