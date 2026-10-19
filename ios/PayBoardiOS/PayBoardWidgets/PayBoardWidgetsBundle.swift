@@ -519,7 +519,7 @@ private struct CalendarWidgetView: View {
                 .padding(.horizontal, PayBoardSpacing.xs)
 
             WidgetWeekdayHeader(font: .caption)
-                .padding(.top, PayBoardSpacing.xs)
+                .padding(.top, PayBoardSpacing.md)
 
             ForEach(Array(weeks.enumerated()), id: \.offset) { _, week in
                 HStack(spacing: 0) {
