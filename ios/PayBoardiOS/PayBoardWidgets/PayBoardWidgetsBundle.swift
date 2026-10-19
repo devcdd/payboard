@@ -214,7 +214,7 @@ private struct EarliestThreeWidgetView: View {
         }
         .padding(.top, family == .systemSmall ? -2 : -6)
         .padding(.bottom, 1)
-        .containerBackground(Color.payCard, for: .widget)
+        .containerBackground(Color.payBackground, for: .widget)
     }
 }
 
@@ -312,7 +312,7 @@ private struct SelectedSubscriptionWidgetView: View {
             }
             Spacer(minLength: 0)
         }
-        .containerBackground(Color.payCard, for: .widget)
+        .containerBackground(Color.payBackground, for: .widget)
     }
 }
 
@@ -540,7 +540,7 @@ private struct CalendarWidgetView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .containerBackground(Color.payCard, for: .widget)
+        .containerBackground(Color.payBackground, for: .widget)
     }
 }
 
@@ -579,7 +579,7 @@ private struct WeekRangeCalendarWidgetView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .containerBackground(Color.payCard, for: .widget)
+        .containerBackground(Color.payBackground, for: .widget)
     }
 }
 
