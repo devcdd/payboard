@@ -16,6 +16,7 @@ public enum BoardDisplayMode: String, CaseIterable, Sendable {
 public struct BoardView: View {
     @ObservedObject var viewModel: BoardViewModel
     @ObservedObject var settingsViewModel: SettingsViewModel
+    @Environment(\.scenePhase) private var scenePhase
     private let displayMode: BoardDisplayMode
     @AppStorage("board.columnsCount") private var columnsCount = 2
     @AppStorage("board.selectedSort") private var selectedSortStorage = BoardSortOption.nextBillingAsc.rawValue
@@ -111,6 +112,11 @@ public struct BoardView: View {
                 )
                 loadCustomSortOrderIfNeeded()
                 syncCustomSortOrder(with: viewModel.subscriptions)
+            }
+            // 백그라운드에 있던 사이 지난 결제일 처리와 위젯 스냅샷 갱신이 멈춰 있으므로 복귀할 때마다 다시 계산
+            .onChange(of: scenePhase) { _, newPhase in
+                guard newPhase == .active else { return }
+                Task { await viewModel.onAppear() }
             }
             .onChange(of: settingsViewModel.selectedOptions) { _, newValue in
                 Task {
@@ -1356,7 +1362,7 @@ public struct BoardView: View {
         switch subscription.billingCycle {
         case .monthly:
             var components = calendar.dateComponents([.year, .month], from: monthStart)
-            let anchorDay = calendar.component(.day, from: anchor)
+            let anchorDay = BillingDateCalculator.resolvedAnchorDay(for: anchor, anchorDay: subscription.billingAnchorDay, calendar: calendar)
             let dayCount = calendar.range(of: .day, in: .month, for: monthStart)?.count ?? 31
             components.day = min(anchorDay, dayCount)
             guard let projected = calendar.date(from: components) else { return nil }
@@ -1367,7 +1373,7 @@ public struct BoardView: View {
             let anchorMonth = calendar.component(.month, from: anchor)
             guard displayedMonth == anchorMonth else { return nil }
             var components = calendar.dateComponents([.year, .month], from: monthStart)
-            let anchorDay = calendar.component(.day, from: anchor)
+            let anchorDay = BillingDateCalculator.resolvedAnchorDay(for: anchor, anchorDay: subscription.billingAnchorDay, calendar: calendar)
             let dayCount = calendar.range(of: .day, in: .month, for: monthStart)?.count ?? 31
             components.day = min(anchorDay, dayCount)
             guard let projected = calendar.date(from: components) else { return nil }

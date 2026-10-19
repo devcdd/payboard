@@ -202,16 +202,11 @@ public struct SubscriptionCardView: View {
             return true
         }
         guard let lastPaymentDate = subscription.lastPaymentDate else { return false }
-        let calendar = Calendar.current
-        let previousDate: Date
-        switch subscription.billingCycle {
-        case .monthly:
-            previousDate = calendar.date(byAdding: .month, value: -1, to: subscription.nextBillingDate) ?? subscription.nextBillingDate
-        case .yearly:
-            previousDate = calendar.date(byAdding: .year, value: -1, to: subscription.nextBillingDate) ?? subscription.nextBillingDate
-        case let .customDays(days):
-            previousDate = calendar.date(byAdding: .day, value: -max(1, days), to: subscription.nextBillingDate) ?? subscription.nextBillingDate
-        }
+        let previousDate = BillingDateCalculator.rewind(
+            from: subscription.nextBillingDate,
+            cycle: subscription.billingCycle,
+            anchorDay: subscription.billingAnchorDay
+        )
         return lastPaymentDate >= previousDate && lastPaymentDate < subscription.nextBillingDate
     }
 

@@ -26,7 +26,8 @@ public final class BoardViewModel: ObservableObject {
 
     public var filteredSubscriptions: [Subscription] {
         let calendar = Calendar.current
-        let now = Date()
+        // 결제일에 시각이 섞여 있어 오늘 결제 항목이 빠지지 않도록 날짜 단위로 비교
+        let now = calendar.startOfDay(for: Date())
 
         switch selectedFilter {
         case .all:
@@ -137,6 +138,7 @@ public final class BoardViewModel: ObservableObject {
             .map { subscription in
                 var copy = subscription
                 copy.nextBillingDate = date
+                copy.billingAnchorDay = nil
                 copy.updatedAt = .now
                 return copy
             }
@@ -243,8 +245,20 @@ public final class BoardViewModel: ObservableObject {
                 calendar.startOfDay(for: subscription.nextBillingDate) <= today
         }
         guard !dueItems.isEmpty else { return }
-        let updates = dueItems.map { completedSubscription(from: $0, at: referenceDate) }
+        let updates = dueItems.map { autoPaidSubscription(from: $0, through: today, calendar: calendar, updatedAt: referenceDate) }
         await saveAndReschedule(updatedSubscriptions: updates)
+    }
+
+    // 앱을 오래 열지 않아 밀린 회차를 모두 원래 결제일로 기록하며 오늘 이후까지 넘김
+    private func autoPaidSubscription(from subscription: Subscription, through today: Date, calendar: Calendar, updatedAt: Date) -> Subscription {
+        var copy = subscription
+        while calendar.startOfDay(for: copy.nextBillingDate) <= today {
+            let advanced = completedSubscription(from: copy, at: copy.nextBillingDate)
+            guard advanced.nextBillingDate > copy.nextBillingDate else { break }
+            copy = advanced
+        }
+        copy.updatedAt = updatedAt
+        return copy
     }
 
     private func completedSubscription(from subscription: Subscription) -> Subscription {
@@ -255,7 +269,8 @@ public final class BoardViewModel: ObservableObject {
         var copy = subscription
         copy.lastPaymentDate = date
         copy.paymentHistoryDates = appendPaymentHistory(date: date, to: subscription.paymentHistoryDates)
-        copy.nextBillingDate = nextBillingDate(after: subscription.nextBillingDate, cycle: subscription.billingCycle)
+        copy.billingAnchorDay = BillingDateCalculator.resolvedAnchorDay(for: subscription.nextBillingDate, anchorDay: subscription.billingAnchorDay)
+        copy.nextBillingDate = BillingDateCalculator.advance(from: subscription.nextBillingDate, cycle: subscription.billingCycle, anchorDay: copy.billingAnchorDay)
         copy.updatedAt = date
         return copy
     }
@@ -265,7 +280,8 @@ public final class BoardViewModel: ObservableObject {
         guard subscription.lastPaymentDate != nil || !subscription.paymentHistoryDates.isEmpty else { return copy }
         copy.paymentHistoryDates = removeLatestPaymentHistory(from: subscription.paymentHistoryDates)
         copy.lastPaymentDate = copy.paymentHistoryDates.max()
-        copy.nextBillingDate = previousBillingDate(before: subscription.nextBillingDate, cycle: subscription.billingCycle)
+        copy.billingAnchorDay = BillingDateCalculator.resolvedAnchorDay(for: subscription.nextBillingDate, anchorDay: subscription.billingAnchorDay)
+        copy.nextBillingDate = BillingDateCalculator.rewind(from: subscription.nextBillingDate, cycle: subscription.billingCycle, anchorDay: copy.billingAnchorDay)
         copy.updatedAt = .now
         return copy
     }
@@ -281,30 +297,6 @@ public final class BoardViewModel: ObservableObject {
         var updated = history.sorted(by: <)
         updated.removeLast()
         return updated
-    }
-
-    private func nextBillingDate(after date: Date, cycle: BillingCycle) -> Date {
-        let calendar = Calendar.current
-        switch cycle {
-        case .monthly:
-            return calendar.date(byAdding: .month, value: 1, to: date) ?? date
-        case .yearly:
-            return calendar.date(byAdding: .year, value: 1, to: date) ?? date
-        case let .customDays(days):
-            return calendar.date(byAdding: .day, value: max(1, days), to: date) ?? date
-        }
-    }
-
-    private func previousBillingDate(before date: Date, cycle: BillingCycle) -> Date {
-        let calendar = Calendar.current
-        switch cycle {
-        case .monthly:
-            return calendar.date(byAdding: .month, value: -1, to: date) ?? date
-        case .yearly:
-            return calendar.date(byAdding: .year, value: -1, to: date) ?? date
-        case let .customDays(days):
-            return calendar.date(byAdding: .day, value: -max(1, days), to: date) ?? date
-        }
     }
 
     private func saveAndReschedule(updatedSubscriptions: [Subscription]) async {

@@ -40,6 +40,8 @@ public struct Subscription: Identifiable, Codable, Equatable, Sendable {
     public var currencyCode: String
     public var billingCycle: BillingCycle
     public var nextBillingDate: Date
+    /// 월간·연간 결제의 원래 결제 일자(1...31). nil 이면 nextBillingDate 의 일자를 쓴다.
+    public var billingAnchorDay: Int?
     public var lastPaymentDate: Date?
     public var paymentHistoryDates: [Date]
     public var iconKey: String
@@ -62,6 +64,7 @@ public struct Subscription: Identifiable, Codable, Equatable, Sendable {
         currencyCode: String = "KRW",
         billingCycle: BillingCycle,
         nextBillingDate: Date,
+        billingAnchorDay: Int? = nil,
         lastPaymentDate: Date? = nil,
         paymentHistoryDates: [Date] = [],
         iconKey: String,
@@ -83,6 +86,7 @@ public struct Subscription: Identifiable, Codable, Equatable, Sendable {
         self.currencyCode = currencyCode
         self.billingCycle = billingCycle
         self.nextBillingDate = nextBillingDate
+        self.billingAnchorDay = billingAnchorDay
         self.lastPaymentDate = lastPaymentDate
         self.paymentHistoryDates = paymentHistoryDates
         self.iconKey = iconKey
@@ -108,6 +112,7 @@ public extension Subscription {
         case currencyCode
         case billingCycle
         case nextBillingDate
+        case billingAnchorDay
         case lastPaymentDate
         case paymentHistoryDates
         case iconKey
@@ -133,6 +138,7 @@ public extension Subscription {
             currencyCode: try container.decode(String.self, forKey: .currencyCode),
             billingCycle: try container.decode(BillingCycle.self, forKey: .billingCycle),
             nextBillingDate: try container.decode(Date.self, forKey: .nextBillingDate),
+            billingAnchorDay: try container.decodeIfPresent(Int.self, forKey: .billingAnchorDay),
             lastPaymentDate: try container.decodeIfPresent(Date.self, forKey: .lastPaymentDate),
             paymentHistoryDates: try container.decodeIfPresent([Date].self, forKey: .paymentHistoryDates) ?? [],
             iconKey: try container.decode(String.self, forKey: .iconKey),

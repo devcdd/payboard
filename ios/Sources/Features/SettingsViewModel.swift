@@ -563,6 +563,7 @@ public final class SettingsViewModel: ObservableObject {
         let billing_cycle_kind: String
         let billing_cycle_days: Int
         let next_billing_date: Date
+        let billing_anchor_day: Int?
         let last_payment_date: Date?
         let icon_key: String
         let icon_color_key: String
@@ -752,6 +753,7 @@ public final class SettingsViewModel: ObservableObject {
             billing_cycle_kind: billingCycle.kind,
             billing_cycle_days: billingCycle.days,
             next_billing_date: subscription.nextBillingDate,
+            billing_anchor_day: subscription.billingAnchorDay,
             last_payment_date: subscription.lastPaymentDate,
             icon_key: subscription.iconKey,
             icon_color_key: subscription.iconColorKey,
@@ -812,6 +814,7 @@ public final class SettingsViewModel: ObservableObject {
                 days: row.billing_cycle_days
             ),
             nextBillingDate: row.next_billing_date,
+            billingAnchorDay: row.billing_anchor_day,
             lastPaymentDate: paymentHistoryDates.max() ?? row.last_payment_date,
             paymentHistoryDates: paymentHistoryDates,
             iconKey: row.icon_key,
