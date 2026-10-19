@@ -262,3 +262,5 @@
 "board.section.paid %lld" = "Paid %lld";
 "board.search.toggle" = "Search";
 "board.dashboard.variableItems" = "Variable amounts";
+"service_editor.billingDay" = "Billing day";
+"service_editor.billingDay.value %lld" = "Day %lld";

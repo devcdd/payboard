@@ -262,3 +262,5 @@
 "board.section.paid %lld" = "결제 완료 %lld";
 "board.search.toggle" = "검색";
 "board.dashboard.variableItems" = "변동금액 항목";
+"service_editor.billingDay" = "결제일";
+"service_editor.billingDay.value %lld" = "매월 %lld일";

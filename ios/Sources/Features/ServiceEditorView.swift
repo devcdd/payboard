@@ -19,6 +19,7 @@ public struct ServiceEditorView: View {
     @State private var isAmountUndecided: Bool
     @State private var nextBillingDate: Date
     @State private var billingCycle: BillingCycle
+    @State private var billingDay: Int
     @State private var customCategoryName: String
     @State private var notificationsEnabled: Bool
     @State private var isAutoPayEnabled: Bool
@@ -56,6 +57,10 @@ public struct ServiceEditorView: View {
         _isAmountUndecided = State(initialValue: original?.isAmountUndecided ?? false)
         _nextBillingDate = State(initialValue: original?.nextBillingDate ?? .now)
         _billingCycle = State(initialValue: original?.billingCycle ?? .monthly)
+        _billingDay = State(initialValue: BillingDateCalculator.resolvedAnchorDay(
+            for: original?.nextBillingDate ?? .now,
+            anchorDay: original?.billingAnchorDay
+        ))
         _customCategoryName = State(initialValue: original?.customCategoryName ?? "")
         _notificationsEnabled = State(initialValue: original?.notificationsEnabled ?? true)
         _isAutoPayEnabled = State(initialValue: original?.isAutoPayEnabled ?? false)
@@ -97,13 +102,30 @@ public struct ServiceEditorView: View {
                     amountField
                     Toggle("service_editor.autoPayEnabled", isOn: $isAutoPayEnabled)
                     Toggle("service_editor.pinned", isOn: $isPinned)
-                    DatePicker("service_editor.nextBillingDate", selection: $nextBillingDate, displayedComponents: .date)
                     Picker("service_editor.billingCycle", selection: $billingCycle) {
                         Text("service_editor.billing.monthly").tag(BillingCycle.monthly)
                         Text("service_editor.billing.yearly").tag(BillingCycle.yearly)
                         Text("service_editor.billing.custom30").tag(BillingCycle.customDays(30))
                     }
                     .pickerStyle(.menu)
+                    .onChange(of: billingCycle) { _, cycle in
+                        if cycle == .monthly {
+                            billingDay = Calendar.current.component(.day, from: nextBillingDate)
+                        }
+                    }
+                    if billingCycle == .monthly {
+                        Picker("service_editor.billingDay", selection: $billingDay) {
+                            ForEach(1...31, id: \.self) { day in
+                                Text("service_editor.billingDay.value \(day)").tag(day)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                        .onChange(of: billingDay) { _, day in
+                            nextBillingDate = Self.date(inMonthOf: nextBillingDate, day: day)
+                        }
+                    } else {
+                        DatePicker("service_editor.nextBillingDate", selection: $nextBillingDate, displayedComponents: .date)
+                    }
                     Toggle("service_editor.notificationsEnabled", isOn: $notificationsEnabled)
                 }
 
@@ -266,7 +288,7 @@ public struct ServiceEditorView: View {
             currencyCode: "KRW",
             billingCycle: billingCycle,
             nextBillingDate: nextBillingDate,
-            billingAnchorDay: original?.nextBillingDate == nextBillingDate ? original?.billingAnchorDay : nil,
+            billingAnchorDay: billingCycle == .monthly ? billingDay : (original?.nextBillingDate == nextBillingDate ? original?.billingAnchorDay : nil),
             lastPaymentDate: original?.lastPaymentDate,
             paymentHistoryDates: original?.paymentHistoryDates ?? [],
             iconKey: selectedIconKey,
@@ -502,6 +524,7 @@ public struct ServiceEditorView: View {
         amountText = draft.isAmountUndecided ? "" : Self.formattedAmountInput(from: draft.amount)
         billingCycle = draft.billingCycle
         nextBillingDate = draft.nextBillingDate
+        billingDay = BillingDateCalculator.resolvedAnchorDay(for: draft.nextBillingDate, anchorDay: draft.billingAnchorDay)
         isAutoPayEnabled = draft.isAutoPayEnabled
         memo = draft.memo ?? memo
         selectedIconKey = draft.iconKey
@@ -646,6 +669,12 @@ public struct ServiceEditorView: View {
         #if canImport(UIKit)
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         #endif
+    }
+
+    // 월간 결제는 일자만 고르므로 현재 결제일이 속한 달 안에서 일자만 바꾼다. 지난 날짜면 저장 시 결제 완료 여부를 묻는다.
+    private static func date(inMonthOf date: Date, day: Int, calendar: Calendar = .current) -> Date {
+        let monthStart = calendar.dateInterval(of: .month, for: date)?.start ?? date
+        return BillingDateCalculator.upcoming(day: day, cycle: .monthly, from: monthStart, calendar: calendar)
     }
 
     private static func formattedAmountInput(from amount: Decimal?) -> String {
