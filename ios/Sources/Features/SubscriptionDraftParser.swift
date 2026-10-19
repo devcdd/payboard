@@ -11,6 +11,9 @@ struct SubscriptionDraft {
     @Guide(description: "서비스 또는 결제 항목 이름. 예: 넷플릭스, 월세, 헬스장")
     var name: String
     var category: Category
+    // 금액보다 먼저 생성되도록 앞에 둔다.
+    @Guide(description: "변동금액, 금액 변동, 매달 다름, 사용량에 따라 다름처럼 금액이 고정되지 않았다고 했으면 true")
+    var isAmountVariable: Bool
     @Guide(description: "결제 금액(원 단위 정수). 언급이 없으면 nil")
     var amount: Int?
     var cycle: Cycle
@@ -52,7 +55,7 @@ extension SubscriptionDraft {
             name: name,
             category: category,
             amount: amount ?? .zero,
-            isAmountUndecided: amount == nil,
+            isAmountUndecided: isAmountVariable || amount == nil,
             billingCycle: cycle,
             nextBillingDate: billingDay.map { BillingDateCalculator.upcoming(day: $0, month: billingMonth, cycle: cycle, from: now) } ?? now,
             billingAnchorDay: billingDay,

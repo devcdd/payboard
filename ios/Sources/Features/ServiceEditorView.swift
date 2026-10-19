@@ -456,9 +456,12 @@ public struct ServiceEditorView: View {
         aiDrafts = []
         defer { isParsingAIInput = false }
         do {
-            let drafts = try await SubscriptionDraftParser.parse(aiInputText).map { $0.subscription() }
-            if drafts.count == 1 {
+            let parsed = try await SubscriptionDraftParser.parse(aiInputText)
+            let drafts = parsed.map { $0.subscription() }
+            if let only = parsed.first, parsed.count == 1 {
                 apply(drafts[0])
+                // 금액을 말하지 않았을 뿐이면 변동으로 두지 않고 사용자가 입력하게 한다.
+                isAmountUndecided = only.isAmountVariable
                 isPresentingAIInput = false
             } else if drafts.isEmpty {
                 aiInputFailed = true
@@ -495,7 +498,7 @@ public struct ServiceEditorView: View {
         name = draft.name
         validationMessageKey = nil
         category = draft.category
-        isAmountUndecided = false
+        isAmountUndecided = draft.isAmountUndecided
         amountText = draft.isAmountUndecided ? "" : Self.formattedAmountInput(from: draft.amount)
         billingCycle = draft.billingCycle
         nextBillingDate = draft.nextBillingDate
