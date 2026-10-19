@@ -29,7 +29,7 @@ public struct BoardView: View {
     @State private var boardSearchQuery = ""
     @State private var isBoardSearchPresented = false
     @State private var isPresentingVariableItems = false
-    @State private var totalRowHeight: CGFloat = 0
+    @State private var totalRowWidth: CGFloat = 0
     @State private var selectedSort: BoardSortOption = .nextBillingAsc
     @State private var hasRestoredPersistedViewState = false
     @State private var isSelectionMode = false
@@ -326,11 +326,11 @@ public struct BoardView: View {
                                 .buttonStyle(.plain)
                             }
                         }
-                        .onGeometryChange(for: CGFloat.self, of: \.size.height) { totalRowHeight = $0 }
+                        .onGeometryChange(for: CGFloat.self, of: \.size.width) { totalRowWidth = $0 }
                         .overlay(alignment: .topLeading) {
                             if isPresentingVariableItems {
                                 variableItemsTooltip
-                                    .offset(y: totalRowHeight + PayBoardSpacing.xs)
+                                    .offset(x: totalRowWidth + PayBoardSpacing.sm)
                                     .transition(.opacity)
                             }
                         }
@@ -946,12 +946,12 @@ public struct BoardView: View {
                     .lineLimit(1)
             }
         }
-        // 라이트·다크 모두에서 카드와 대비되도록 전경/배경을 반전한 단색 툴팁
-        .foregroundStyle(Color.payBackground)
+        // 테마와 무관하게 어두운 툴팁으로 고정
+        .foregroundStyle(Color.white)
         .padding(.horizontal, PayBoardSpacing.md)
         .padding(.vertical, PayBoardSpacing.sm + 2)
         .frame(minWidth: 140, alignment: .leading)
-        .background(Color.primary, in: RoundedRectangle(cornerRadius: PayBoardRadius.control))
+        .background(Color(white: 0.18), in: RoundedRectangle(cornerRadius: PayBoardRadius.control))
         .fixedSize()
     }
 
