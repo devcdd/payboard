@@ -30,8 +30,6 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        manifestPlaceholders["SUPABASE_URL"] = localConfig("SUPABASE_URL")
-        manifestPlaceholders["SUPABASE_ANON_KEY"] = localConfig("SUPABASE_ANON_KEY")
         manifestPlaceholders["PAYBOARD_SERVER_URL"] = localConfig("PAYBOARD_SERVER_URL")
     }
 

@@ -4,11 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
-import io.github.jan.supabase.auth.Auth
-import io.github.jan.supabase.auth.auth
-import io.github.jan.supabase.auth.handleDeeplinks
-import io.github.jan.supabase.auth.providers.Kakao
-import io.github.jan.supabase.createSupabaseClient
+import android.util.Base64
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -17,6 +13,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -32,6 +30,7 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import kr.co.cdd.payboard.core.data.notifications.SubscriptionReminderScheduler
 import kr.co.cdd.payboard.core.domain.model.BillingCycle
 import kr.co.cdd.payboard.core.domain.model.Subscription
@@ -44,6 +43,8 @@ import java.math.BigDecimal
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
+import java.security.SecureRandom
 import java.time.Instant
 import java.time.OffsetDateTime
 
@@ -52,7 +53,6 @@ enum class BackupAuthNotice {
     SIGN_IN_SUCCESS,
     SIGN_IN_FAILED,
     SIGN_OUT_SUCCESS,
-    SIGN_OUT_FAILED,
     SIGN_IN_RESTORE_PROMPT,
     SIGN_IN_AUTO_BACKUP_DONE,
     SIGN_IN_RESTORE_SKIPPED,
@@ -61,7 +61,6 @@ enum class BackupAuthNotice {
     RESTORE_SUCCESS,
     RESTORE_FAILED,
     RESTORE_EMPTY,
-    DELETE_ACCOUNT_SERVER_NOT_CONFIGURED,
     DELETE_ACCOUNT_SUCCESS,
     DELETE_ACCOUNT_FAILED,
 }
@@ -87,25 +86,16 @@ class BackupAuthManager(
 ) {
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val config = loadConfiguration(appContext)
-    private val accountDeletionServerUrl = normalizedMetaDataValue(appContext, "PAYBOARD_SERVER_URL")
+    private val serverUrl = normalizedMetaDataValue(appContext, "PAYBOARD_SERVER_URL")
     private val json = Json { ignoreUnknownKeys = true }
-    private val supabase = config?.let { loadedConfig ->
-        createSupabaseClient(
-            supabaseUrl = loadedConfig.url,
-            supabaseKey = loadedConfig.anonKey,
-        ) {
-            install(Auth) {
-                host = DEEP_LINK_HOST
-                scheme = DEEP_LINK_SCHEME
-            }
-        }
-    }
+    private val prefs = appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    // refresh token 이 1회용(rotation)이라 동시에 갱신하면 하나가 무효화되므로 직렬화함
+    private val sessionMutex = Mutex()
 
     private val _state = MutableStateFlow(
         BackupAuthState(
-            isConfigured = supabase != null,
-            debugText = if (supabase == null) configurationDebugText(appContext, false) else null,
+            isConfigured = serverUrl != null,
+            debugText = if (serverUrl == null) configurationDebugText(appContext, false) else null,
         ),
     )
     val state: StateFlow<BackupAuthState> = _state.asStateFlow()
@@ -114,7 +104,7 @@ class BackupAuthManager(
     private var lastUploadRequestedAt: Instant? = null
 
     init {
-        if (supabase != null) {
+        if (serverUrl != null) {
             refreshState()
         }
     }
@@ -131,16 +121,24 @@ class BackupAuthManager(
     }
 
     suspend fun signInWithKakao() {
-        val client = supabase ?: run {
-            _state.value = _state.value.copy(
-                notice = BackupAuthNotice.NOT_CONFIGURED,
-                debugText = configurationDebugText(appContext, false),
-            )
+        val baseUrl = serverUrl ?: run {
+            notifyNotConfigured()
             return
         }
         _state.value = _state.value.copy(isBusy = true, debugText = null)
         runCatching {
-            client.auth.signInWith(Kakao, redirectUrl = DEEP_LINK_REDIRECT_URL)
+            val verifier = base64Url(ByteArray(32).also(SecureRandom()::nextBytes))
+            val challenge = base64Url(MessageDigest.getInstance("SHA-256").digest(verifier.toByteArray(StandardCharsets.US_ASCII)))
+            // 브라우저를 다녀오는 사이 프로세스가 죽을 수 있어 verifier 를 메모리가 아닌 prefs 에 둠
+            prefs.edit().putString(KEY_CODE_VERIFIER, verifier).apply()
+            val startUri = Uri.parse(baseUrl).buildUpon()
+                .appendEncodedPath("v1/auth/kakao/start")
+                .appendQueryParameter("redirect_to", DEEP_LINK_REDIRECT_URL)
+                .appendQueryParameter("code_challenge", challenge)
+                .build()
+            appContext.startActivity(
+                Intent(Intent.ACTION_VIEW, startUri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
         }.onFailure { error ->
             _state.value = _state.value.copy(
                 notice = BackupAuthNotice.SIGN_IN_FAILED,
@@ -151,34 +149,32 @@ class BackupAuthManager(
     }
 
     suspend fun signOut() {
-        val client = supabase ?: run {
-            _state.value = _state.value.copy(
-                notice = BackupAuthNotice.NOT_CONFIGURED,
-                debugText = configurationDebugText(appContext, false),
-            )
+        if (serverUrl == null) {
+            notifyNotConfigured()
             return
         }
         _state.value = _state.value.copy(isBusy = true, debugText = null)
-        runCatching {
-            client.auth.signOut()
-        }.onSuccess {
-            _state.value = _state.value.copy(
-                isSignedIn = false,
-                accountIdentifier = null,
-                latestBackupAt = null,
-                notice = BackupAuthNotice.SIGN_OUT_SUCCESS,
-                debugText = null,
-                isBusy = false,
-                isShowingRestorePromptAfterSignIn = false,
-            )
-            lastUploadRequestedAt = null
-        }.onFailure { error ->
-            _state.value = _state.value.copy(
-                notice = BackupAuthNotice.SIGN_OUT_FAILED,
-                debugText = describeBackupError(error, "sign_out"),
-                isBusy = false,
-            )
+        // 서버 폐기가 실패해도 로컬 세션은 지워야 로그아웃이 보장됨
+        loadSession()?.let { session ->
+            runCatching {
+                executeHttpRequest(
+                    path = "v1/auth/signout",
+                    method = "POST",
+                    body = buildJsonObject { put("refresh_token", JsonPrimitive(session.refreshToken)) }.toString(),
+                )
+            }
         }
+        clearSession()
+        _state.value = _state.value.copy(
+            isSignedIn = false,
+            accountIdentifier = null,
+            latestBackupAt = null,
+            notice = BackupAuthNotice.SIGN_OUT_SUCCESS,
+            debugText = null,
+            isBusy = false,
+            isShowingRestorePromptAfterSignIn = false,
+        )
+        lastUploadRequestedAt = null
     }
 
     suspend fun uploadBackup() {
@@ -197,13 +193,8 @@ class BackupAuthManager(
         }
         lastUploadRequestedAt = now
 
-        val client = supabase ?: run {
-            if (showResultNotice) {
-                _state.value = _state.value.copy(
-                    notice = BackupAuthNotice.NOT_CONFIGURED,
-                    debugText = configurationDebugText(appContext, false),
-                )
-            }
+        if (serverUrl == null) {
+            if (showResultNotice) notifyNotConfigured()
             return
         }
         if (!showResultNotice && !_state.value.isSignedIn) return
@@ -211,17 +202,9 @@ class BackupAuthManager(
 
         _state.value = _state.value.copy(isSyncInProgress = true, debugText = null)
         try {
-            val session = client.auth.currentSessionOrNull() ?: throw IOException("No active session")
-            val subscriptions = subscriptionRepository.fetchAll()
-            val timestamp = Instant.now()
-            replaceRemoteBackup(
-                accessToken = session.accessToken,
-                userId = session.user?.id?.toString().orEmpty(),
-                subscriptions = subscriptions,
-                updatedAt = timestamp,
-            )
+            val metadata = replaceRemoteBackup(subscriptionRepository.fetchAll())
             _state.value = _state.value.copy(
-                latestBackupAt = timestamp,
+                latestBackupAt = metadata.updatedAt,
                 notice = if (showResultNotice) BackupAuthNotice.UPLOAD_SUCCESS else _state.value.notice,
                 debugText = null,
                 isSyncInProgress = false,
@@ -236,11 +219,8 @@ class BackupAuthManager(
     }
 
     suspend fun restoreLatestBackup() {
-        val client = supabase ?: run {
-            _state.value = _state.value.copy(
-                notice = BackupAuthNotice.NOT_CONFIGURED,
-                debugText = configurationDebugText(appContext, false),
-            )
+        if (serverUrl == null) {
+            notifyNotConfigured()
             return
         }
         if (_state.value.isSyncInProgress || _state.value.isAccountDeletionInProgress) return
@@ -251,12 +231,7 @@ class BackupAuthManager(
             debugText = null,
         )
         try {
-            val session = client.auth.currentSessionOrNull() ?: throw IOException("No active session")
-            val userId = session.user?.id?.toString().orEmpty()
-            val metadata = fetchLatestBackupMetadata(
-                accessToken = session.accessToken,
-                userId = userId,
-            )
+            val metadata = fetchLatestBackupMetadata()
             if (metadata == null) {
                 _state.value = _state.value.copy(
                     notice = BackupAuthNotice.RESTORE_EMPTY,
@@ -266,17 +241,12 @@ class BackupAuthManager(
                 return
             }
 
-            val remoteSubscriptions = fetchRemoteSubscriptions(
-                accessToken = session.accessToken,
-                userId = userId,
-            )
+            val data = json.parseToJsonElement(authorizedRequest(path = "v1/backup/data", method = "GET")).jsonObject
+            val remoteSubscriptions = data["items"].asJsonArray().map { it.jsonObject.toRemoteSubscriptionItem() }
             if (metadata.itemCount > 0 && remoteSubscriptions.isEmpty()) {
                 throw FileNotFoundException("Backup items not found")
             }
-            val remotePaymentHistories = fetchRemotePaymentHistories(
-                accessToken = session.accessToken,
-                userId = userId,
-            )
+            val remotePaymentHistories = data["payment_histories"].asJsonArray().map { it.jsonObject.toRemotePaymentHistory() }
             val restoredSubscriptions = buildSubscriptions(
                 remoteSubscriptions = remoteSubscriptions,
                 paymentHistories = remotePaymentHistories,
@@ -302,30 +272,20 @@ class BackupAuthManager(
     }
 
     suspend fun deleteAccount() {
-        val client = supabase ?: run {
-            _state.value = _state.value.copy(
-                notice = BackupAuthNotice.NOT_CONFIGURED,
-                debugText = configurationDebugText(appContext, false),
-            )
-            return
-        }
-        val serverUrl = accountDeletionServerUrl ?: run {
-            _state.value = _state.value.copy(
-                notice = BackupAuthNotice.DELETE_ACCOUNT_SERVER_NOT_CONFIGURED,
-                debugText = "PAYBOARD_SERVER_URL is missing",
-            )
+        if (serverUrl == null) {
+            notifyNotConfigured()
             return
         }
         if (_state.value.isSyncInProgress || _state.value.isAccountDeletionInProgress) return
 
         _state.value = _state.value.copy(isAccountDeletionInProgress = true, debugText = null)
         try {
-            val session = client.auth.currentSessionOrNull() ?: throw IOException("No active session")
-            deleteAccountFromServer(
-                accessToken = session.accessToken,
-                serverUrl = serverUrl,
+            authorizedRequest(
+                path = "v1/account/delete",
+                method = "POST",
+                body = buildJsonObject { put("reason", JsonPrimitive("user_requested")) }.toString(),
             )
-            runCatching { client.auth.signOut() }
+            clearSession()
             _state.value = _state.value.copy(
                 isSignedIn = false,
                 accountIdentifier = null,
@@ -359,51 +319,51 @@ class BackupAuthManager(
     }
 
     fun handleDeepLink(intent: Intent) {
-        val client = supabase ?: return
+        if (serverUrl == null) return
         val data = intent.data ?: return
         if (!isBackupAuthDeepLink(data)) return
 
         isHandlingAuthCallback = true
         _state.value = _state.value.copy(isBusy = true)
-        client.handleDeeplinks(
-            intent = intent,
-            onSessionSuccess = { session ->
-                scope.launch {
-                    try {
-                        client.auth.importSession(session)
-                        val userId = session.user?.id?.toString().orEmpty()
-                        val accountIdentifier = session.user?.email ?: userId
-                        _state.value = _state.value.copy(
-                            isBusy = false,
-                            isSignedIn = true,
-                            accountIdentifier = accountIdentifier,
-                            notice = BackupAuthNotice.SIGN_IN_SUCCESS,
-                            debugText = null,
-                        )
-                        bootstrapBackupAfterSignIn(
-                            accessToken = session.accessToken,
-                            userId = userId,
-                            accountIdentifier = accountIdentifier,
-                        )
-                        refreshBackupAuthState()
-                    } finally {
-                        isHandlingAuthCallback = false
-                    }
-                }
-            },
-            onError = { error ->
-                isHandlingAuthCallback = false
+        scope.launch {
+            try {
+                val code = data.getQueryParameter("code")
+                    ?: throw IOException(data.getQueryParameter("error") ?: "Missing code")
+                val verifier = prefs.getString(KEY_CODE_VERIFIER, null)
+                    ?: throw IOException("Missing code_verifier")
+                val payload = executeHttpRequest(
+                    path = "v1/auth/kakao/exchange",
+                    method = "POST",
+                    body = buildJsonObject {
+                        put("code", JsonPrimitive(code))
+                        put("code_verifier", JsonPrimitive(verifier))
+                    }.toString(),
+                )
+                prefs.edit().remove(KEY_CODE_VERIFIER).apply()
+                val session = saveSession(payload)
+                val accountIdentifier = session.email ?: session.userId
+                _state.value = _state.value.copy(
+                    isBusy = false,
+                    isSignedIn = true,
+                    accountIdentifier = accountIdentifier,
+                    notice = BackupAuthNotice.SIGN_IN_SUCCESS,
+                    debugText = null,
+                )
+                bootstrapBackupAfterSignIn()
+            } catch (error: Throwable) {
                 _state.value = _state.value.copy(
                     isBusy = false,
                     notice = BackupAuthNotice.SIGN_IN_FAILED,
                     debugText = describeBackupError(error, "sign_in"),
                 )
-            },
-        )
+            } finally {
+                isHandlingAuthCallback = false
+            }
+        }
     }
 
     private suspend fun refreshBackupAuthState() {
-        val client = supabase ?: run {
+        if (serverUrl == null) {
             _state.value = _state.value.copy(
                 isConfigured = false,
                 isSignedIn = false,
@@ -414,26 +374,35 @@ class BackupAuthManager(
             )
             return
         }
-        _state.value = _state.value.copy(isBusy = true)
-        try {
-            val session = client.auth.currentSessionOrNull() ?: throw IOException("No active session")
-            val latestBackupAt = fetchLatestBackupMetadata(
-                accessToken = session.accessToken,
-                userId = session.user?.id?.toString().orEmpty(),
-            )?.updatedAt
-            _state.value = _state.value.copy(
-                isConfigured = true,
-                isSignedIn = true,
-                accountIdentifier = session.user?.email ?: session.user?.id?.toString(),
-                latestBackupAt = latestBackupAt,
-                debugText = null,
-                isBusy = false,
-            )
-        } catch (error: Throwable) {
+        val session = loadSession()
+        if (session == null) {
             _state.value = _state.value.copy(
                 isConfigured = true,
                 isSignedIn = false,
                 accountIdentifier = null,
+                latestBackupAt = null,
+                isBusy = false,
+            )
+            return
+        }
+        _state.value = _state.value.copy(
+            isConfigured = true,
+            isSignedIn = true,
+            accountIdentifier = session.email ?: session.userId,
+            isBusy = true,
+        )
+        try {
+            _state.value = _state.value.copy(
+                latestBackupAt = fetchLatestBackupMetadata()?.updatedAt,
+                debugText = null,
+                isBusy = false,
+            )
+        } catch (error: Throwable) {
+            // 네트워크 오류로는 로그인을 풀지 않고, 세션이 서버에서 거부됐을 때만 로그아웃 처리함
+            val isSignedIn = loadSession() != null
+            _state.value = _state.value.copy(
+                isSignedIn = isSignedIn,
+                accountIdentifier = if (isSignedIn) _state.value.accountIdentifier else null,
                 latestBackupAt = null,
                 debugText = describeBackupError(error, "refresh_auth"),
                 isBusy = false,
@@ -441,38 +410,20 @@ class BackupAuthManager(
         }
     }
 
-    private suspend fun bootstrapBackupAfterSignIn(
-        accessToken: String,
-        userId: String,
-        accountIdentifier: String,
-    ) {
+    private suspend fun bootstrapBackupAfterSignIn() {
         try {
-            val metadata = fetchLatestBackupMetadata(
-                accessToken = accessToken,
-                userId = userId,
-            )
+            val metadata = fetchLatestBackupMetadata()
             if (metadata != null) {
                 _state.value = _state.value.copy(
-                    isSignedIn = true,
-                    accountIdentifier = accountIdentifier,
                     latestBackupAt = metadata.updatedAt,
                     notice = BackupAuthNotice.SIGN_IN_RESTORE_PROMPT,
                     isShowingRestorePromptAfterSignIn = true,
                     debugText = null,
                 )
             } else {
-                val subscriptions = subscriptionRepository.fetchAll()
-                val timestamp = Instant.now()
-                replaceRemoteBackup(
-                    accessToken = accessToken,
-                    userId = userId,
-                    subscriptions = subscriptions,
-                    updatedAt = timestamp,
-                )
+                val uploaded = replaceRemoteBackup(subscriptionRepository.fetchAll())
                 _state.value = _state.value.copy(
-                    isSignedIn = true,
-                    accountIdentifier = accountIdentifier,
-                    latestBackupAt = timestamp,
+                    latestBackupAt = uploaded.updatedAt,
                     notice = BackupAuthNotice.SIGN_IN_AUTO_BACKUP_DONE,
                     isShowingRestorePromptAfterSignIn = false,
                     debugText = null,
@@ -486,224 +437,113 @@ class BackupAuthManager(
         }
     }
 
-    private suspend fun fetchLatestBackupMetadata(
-        accessToken: String,
-        userId: String,
-    ): BackupMetadata? {
-        val payload = executeRestRequest(
-            method = "GET",
-            path = LATEST_BACKUPS_TABLE,
-            accessToken = accessToken,
-            query = listOf(
-                "select" to "user_id,item_count,created_at,updated_at",
-                "user_id" to "eq.$userId",
-                "limit" to "1",
-            ),
-        )
-        val rows = payload.asJsonArray()
-        return rows.firstOrNull()?.jsonObject?.toBackupMetadata()
+    private suspend fun fetchLatestBackupMetadata(): BackupMetadata? = try {
+        json.parseToJsonElement(authorizedRequest(path = "v1/backup", method = "GET")).jsonObject.toBackupMetadata()
+    } catch (error: HttpException) {
+        if (error.statusCode == HttpURLConnection.HTTP_NOT_FOUND) null else throw error
     }
 
-    private suspend fun fetchRemoteSubscriptions(
-        accessToken: String,
-        userId: String,
-    ): List<RemoteSubscriptionItem> {
-        val payload = executeRestRequest(
-            method = "GET",
-            path = BACKUP_ITEMS_TABLE,
-            accessToken = accessToken,
-            query = listOf(
-                "select" to """
-                    id,
-                    user_id,
-                    name,
-                    category,
-                    amount,
-                    is_amount_undecided,
-                    currency_code,
-                    billing_cycle_kind,
-                    billing_cycle_days,
-                    next_billing_date,
-                    last_payment_date,
-                    icon_key,
-                    icon_color_key,
-                    custom_category_name,
-                    notifications_enabled,
-                    is_auto_pay_enabled,
-                    is_pinned,
-                    is_active,
-                    memo,
-                    sort_order,
-                    created_at,
-                    updated_at
-                """.trimIndent().replace("\n", ""),
-                "user_id" to "eq.$userId",
-                "order" to "sort_order.asc,created_at.asc",
-            ),
-        )
-        return payload.asJsonArray().map { it.jsonObject.toRemoteSubscriptionItem() }
-    }
-
-    private suspend fun fetchRemotePaymentHistories(
-        accessToken: String,
-        userId: String,
-    ): List<RemotePaymentHistory> {
-        val payload = executeRestRequest(
-            method = "GET",
-            path = PAYMENT_HISTORIES_TABLE,
-            accessToken = accessToken,
-            query = listOf(
-                "select" to """
-                    user_id,
-                    subscription_id,
-                    paid_at,
-                    scheduled_date,
-                    amount_snapshot,
-                    currency_code,
-                    is_auto_pay,
-                    status,
-                    created_at,
-                    updated_at
-                """.trimIndent().replace("\n", ""),
-                "user_id" to "eq.$userId",
-                "status" to "eq.paid",
-            ),
-        )
-        return payload.asJsonArray().map { it.jsonObject.toRemotePaymentHistory() }
-    }
-
-    private suspend fun replaceRemoteBackup(
-        accessToken: String,
-        userId: String,
-        subscriptions: List<Subscription>,
-        updatedAt: Instant,
-    ) {
-        deleteRemoteBackupTables(accessToken = accessToken, userId = userId)
-
-        if (subscriptions.isNotEmpty()) {
-            executeRestRequest(
-                method = "POST",
-                path = BACKUP_ITEMS_TABLE,
-                accessToken = accessToken,
-                body = buildBackupItemsPayload(userId, subscriptions),
-                prefer = "return=minimal",
-            )
-        }
-
-        val paymentRowsPayload = buildPaymentHistoriesPayload(userId, subscriptions)
-        if (paymentRowsPayload != "[]") {
-            executeRestRequest(
-                method = "POST",
-                path = PAYMENT_HISTORIES_TABLE,
-                accessToken = accessToken,
-                body = paymentRowsPayload,
-                prefer = "return=minimal",
-            )
-        }
-
-        executeRestRequest(
-            method = "POST",
-            path = LATEST_BACKUPS_TABLE,
-            accessToken = accessToken,
-            query = listOf("on_conflict" to "user_id"),
-            body = buildBackupMetadataPayload(
-                userId = userId,
-                itemCount = subscriptions.size,
-                updatedAt = updatedAt,
-            ),
-            prefer = "resolution=merge-duplicates,return=minimal",
-        )
-    }
-
-    private suspend fun deleteRemoteBackupTables(
-        accessToken: String,
-        userId: String,
-    ) {
-        executeRestRequest(
-            method = "DELETE",
-            path = PAYMENT_HISTORIES_TABLE,
-            accessToken = accessToken,
-            query = listOf("user_id" to "eq.$userId"),
-        )
-        executeRestRequest(
-            method = "DELETE",
-            path = BACKUP_ITEMS_TABLE,
-            accessToken = accessToken,
-            query = listOf("user_id" to "eq.$userId"),
-        )
-    }
-
-    private suspend fun deleteAccountFromServer(
-        accessToken: String,
-        serverUrl: String,
-    ) {
-        val payload = buildJsonObject {
-            put("reason", JsonPrimitive("user_requested"))
+    private suspend fun replaceRemoteBackup(subscriptions: List<Subscription>): BackupMetadata {
+        val body = buildJsonObject {
+            put("backup_version", JsonPrimitive(2))
+            put("device_id", JsonNull)
+            put("app_version", JsonNull)
+            put("items", buildBackupItemsPayload(subscriptions))
+            put("payment_histories", buildPaymentHistoriesPayload(subscriptions))
         }.toString()
-        val endpoint = Uri.parse(serverUrl)
-            .buildUpon()
-            .appendPath("v1")
-            .appendPath("account")
-            .appendPath("delete")
-            .build()
-            .toString()
+        return json.parseToJsonElement(authorizedRequest(path = "v1/backup", method = "PUT", body = body))
+            .jsonObject
+            .toBackupMetadata()
+    }
 
-        executeHttpRequest(
-            url = URL(endpoint),
-            method = "POST",
+    private suspend fun authorizedRequest(path: String, method: String, body: String? = null): String {
+        val session = validSession()
+        return executeHttpRequest(path = path, method = method, accessToken = session.accessToken, body = body)
+    }
+
+    private suspend fun validSession(): Session = sessionMutex.withLock {
+        val session = loadSession() ?: throw IOException("No active session")
+        if (session.expiresAtMillis - System.currentTimeMillis() > TOKEN_REFRESH_MARGIN_MILLIS) {
+            return@withLock session
+        }
+        try {
+            saveSession(
+                executeHttpRequest(
+                    path = "v1/auth/refresh",
+                    method = "POST",
+                    body = buildJsonObject { put("refresh_token", JsonPrimitive(session.refreshToken)) }.toString(),
+                ),
+            )
+        } catch (error: HttpException) {
+            if (error.statusCode == HttpURLConnection.HTTP_UNAUTHORIZED) clearSession()
+            throw error
+        }
+    }
+
+    private fun saveSession(payload: String): Session {
+        val root = json.parseToJsonElement(payload).jsonObject
+        val user = root["user"]?.jsonObject ?: throw IOException("Missing field: user")
+        val session = Session(
+            accessToken = root.string("access_token"),
+            refreshToken = root.string("refresh_token"),
+            expiresAtMillis = System.currentTimeMillis() + (root["expires_in"]?.jsonPrimitive?.longOrNull ?: 0L) * 1000,
+            userId = user.string("id"),
+            email = user.optionalString("email")?.takeIf(String::isNotBlank),
+        )
+        prefs.edit()
+            .putString(KEY_ACCESS_TOKEN, session.accessToken)
+            .putString(KEY_REFRESH_TOKEN, session.refreshToken)
+            .putLong(KEY_EXPIRES_AT, session.expiresAtMillis)
+            .putString(KEY_USER_ID, session.userId)
+            .putString(KEY_EMAIL, session.email)
+            .apply()
+        return session
+    }
+
+    private fun loadSession(): Session? {
+        val accessToken = prefs.getString(KEY_ACCESS_TOKEN, null) ?: return null
+        val refreshToken = prefs.getString(KEY_REFRESH_TOKEN, null) ?: return null
+        val userId = prefs.getString(KEY_USER_ID, null) ?: return null
+        return Session(
             accessToken = accessToken,
-            anonKey = config?.anonKey,
-            body = payload,
+            refreshToken = refreshToken,
+            expiresAtMillis = prefs.getLong(KEY_EXPIRES_AT, 0L),
+            userId = userId,
+            email = prefs.getString(KEY_EMAIL, null),
         )
     }
 
-    private suspend fun executeRestRequest(
-        method: String,
-        path: String,
-        accessToken: String,
-        query: List<Pair<String, String>> = emptyList(),
-        body: String? = null,
-        prefer: String? = null,
-    ): String {
-        val loadedConfig = checkNotNull(config)
-        val baseUrl = Uri.parse(loadedConfig.url)
-            .buildUpon()
-            .appendPath("rest")
-            .appendPath("v1")
-            .appendPath(path)
-            .build()
-            .toString()
-        val uriBuilder = Uri.parse(baseUrl).buildUpon()
-        query.forEach { (key, value) -> uriBuilder.appendQueryParameter(key, value) }
-        return executeHttpRequest(
-            url = URL(uriBuilder.build().toString()),
-            method = method,
-            accessToken = accessToken,
-            anonKey = loadedConfig.anonKey,
-            body = body,
-            prefer = prefer,
+    private fun clearSession() {
+        prefs.edit()
+            .remove(KEY_ACCESS_TOKEN)
+            .remove(KEY_REFRESH_TOKEN)
+            .remove(KEY_EXPIRES_AT)
+            .remove(KEY_USER_ID)
+            .remove(KEY_EMAIL)
+            .apply()
+    }
+
+    private fun notifyNotConfigured() {
+        _state.value = _state.value.copy(
+            notice = BackupAuthNotice.NOT_CONFIGURED,
+            debugText = configurationDebugText(appContext, false),
         )
     }
 
     private suspend fun executeHttpRequest(
-        url: URL,
+        path: String,
         method: String,
-        accessToken: String,
-        anonKey: String?,
+        accessToken: String? = null,
         body: String? = null,
-        prefer: String? = null,
     ): String = withContext(Dispatchers.IO) {
+        val url = URL(Uri.parse(checkNotNull(serverUrl)).buildUpon().appendEncodedPath(path).build().toString())
         val connection = (url.openConnection() as HttpURLConnection).apply {
             requestMethod = method
             connectTimeout = 15_000
             readTimeout = 15_000
             setRequestProperty("Accept", "application/json")
-            if (!anonKey.isNullOrBlank()) {
-                setRequestProperty("apikey", anonKey)
-            }
-            setRequestProperty("Authorization", "Bearer $accessToken")
-            if (prefer != null) {
-                setRequestProperty("Prefer", prefer)
+            if (accessToken != null) {
+                setRequestProperty("Authorization", "Bearer $accessToken")
             }
             if (body != null) {
                 doOutput = true
@@ -723,7 +563,7 @@ class BackupAuthManager(
                 .orEmpty()
             if (responseCode !in 200..299) {
                 val message = extractServerErrorMessage(payload).ifBlank { "HTTP $responseCode" }
-                throw IOException(message)
+                throw HttpException(responseCode, message)
             }
             payload
         } finally {
@@ -731,27 +571,10 @@ class BackupAuthManager(
         }
     }
 
-    private fun buildBackupMetadataPayload(
-        userId: String,
-        itemCount: Int,
-        updatedAt: Instant,
-    ): String = buildJsonObject {
-        put("user_id", JsonPrimitive(userId))
-        put("backup_version", JsonPrimitive(2))
-        put("item_count", JsonPrimitive(itemCount))
-        put("device_id", JsonNull)
-        put("app_version", JsonNull)
-        put("updated_at", JsonPrimitive(updatedAt.toString()))
-    }.toString()
-
-    private fun buildBackupItemsPayload(
-        userId: String,
-        subscriptions: List<Subscription>,
-    ): String = buildJsonArray {
+    private fun buildBackupItemsPayload(subscriptions: List<Subscription>): JsonArray = buildJsonArray {
         subscriptions.forEachIndexed { index, subscription ->
             add(buildJsonObject {
                 put("id", JsonPrimitive(subscription.id.toString()))
-                put("user_id", JsonPrimitive(userId))
                 put("name", JsonPrimitive(subscription.name))
                 put("category", JsonPrimitive(subscription.category.name.lowercase()))
                 put("amount", JsonPrimitive(subscription.amount))
@@ -787,19 +610,15 @@ class BackupAuthManager(
                 put("updated_at", JsonPrimitive(subscription.updatedAt.toString()))
             })
         }
-    }.toString()
+    }
 
-    private fun buildPaymentHistoriesPayload(
-        userId: String,
-        subscriptions: List<Subscription>,
-    ): String = buildJsonArray {
+    private fun buildPaymentHistoriesPayload(subscriptions: List<Subscription>): JsonArray = buildJsonArray {
         subscriptions.forEach { subscription ->
             val paidDates = (subscription.paymentHistoryDates + listOfNotNull(subscription.lastPaymentDate))
                 .distinct()
                 .sorted()
             paidDates.forEach { paidAt ->
                 add(buildJsonObject {
-                    put("user_id", JsonPrimitive(userId))
                     put("subscription_id", JsonPrimitive(subscription.id.toString()))
                     put("paid_at", JsonPrimitive(paidAt.toString()))
                     put("scheduled_date", JsonPrimitive(paidAt.toString()))
@@ -812,7 +631,7 @@ class BackupAuthManager(
                 })
             }
         }
-    }.toString()
+    }
 
     private fun buildSubscriptions(
         remoteSubscriptions: List<RemoteSubscriptionItem>,
@@ -920,8 +739,8 @@ class BackupAuthManager(
     private fun JsonObject.optionalInt(key: String): Int? =
         get(key)?.jsonPrimitive?.intOrNull
 
-    private fun String.asJsonArray(): JsonArray =
-        if (isBlank()) JsonArray(emptyList()) else json.parseToJsonElement(this).jsonArray
+    private fun JsonElement?.asJsonArray(): JsonArray =
+        if (this == null || this is JsonNull) JsonArray(emptyList()) else jsonArray
 
     private fun extractServerErrorMessage(payload: String): String {
         if (payload.isBlank()) return ""
@@ -937,10 +756,15 @@ class BackupAuthManager(
         return "$operation: ${error.message ?: error::class.java.simpleName}"
     }
 
-    private data class Configuration(
-        val url: String,
-        val anonKey: String,
+    private data class Session(
+        val accessToken: String,
+        val refreshToken: String,
+        val expiresAtMillis: Long,
+        val userId: String,
+        val email: String?,
     )
+
+    private class HttpException(val statusCode: Int, message: String) : IOException(message)
 
     private data class BackupMetadata(
         val itemCount: Int,
@@ -982,28 +806,25 @@ class BackupAuthManager(
         const val DEEP_LINK_PATH = "/callback"
         const val DEEP_LINK_REDIRECT_URL = "$DEEP_LINK_SCHEME://$DEEP_LINK_HOST$DEEP_LINK_PATH"
         private const val UPLOAD_DEBOUNCE_MILLIS = 800L
+        private const val TOKEN_REFRESH_MARGIN_MILLIS = 60_000L
 
-        private const val LATEST_BACKUPS_TABLE = "subscription_latest_backups"
-        private const val BACKUP_ITEMS_TABLE = "subscription_items"
-        private const val PAYMENT_HISTORIES_TABLE = "subscription_payment_histories"
+        private const val PREFS_NAME = "payboard_backup_auth"
+        private const val KEY_ACCESS_TOKEN = "access_token"
+        private const val KEY_REFRESH_TOKEN = "refresh_token"
+        private const val KEY_EXPIRES_AT = "expires_at"
+        private const val KEY_USER_ID = "user_id"
+        private const val KEY_EMAIL = "email"
+        private const val KEY_CODE_VERIFIER = "kakao_code_verifier"
 
-        private fun loadConfiguration(context: Context): Configuration? {
-            val url = normalizedMetaDataValue(context, "SUPABASE_URL")
-            val anonKey = normalizedMetaDataValue(context, "SUPABASE_ANON_KEY")
-            if (url == null || anonKey == null) return null
-            return Configuration(url = url, anonKey = anonKey)
-        }
+        private fun base64Url(bytes: ByteArray): String =
+            Base64.encodeToString(bytes, Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP)
 
         private fun configurationDebugText(
             context: Context,
             isConfigured: Boolean,
         ): String {
-            val url = normalizedMetaDataValue(context, "SUPABASE_URL") ?: "<nil>"
-            val key = normalizedMetaDataValue(context, "SUPABASE_ANON_KEY")?.let(::maskSecret) ?: "<nil>"
             val serverUrl = normalizedMetaDataValue(context, "PAYBOARD_SERVER_URL") ?: "<nil>"
             return listOf(
-                "SUPABASE_URL: $url",
-                "SUPABASE_ANON_KEY: $key",
                 "PAYBOARD_SERVER_URL: $serverUrl",
                 "isBackupConfigured: $isConfigured",
             ).joinToString(separator = "\n")
@@ -1026,14 +847,6 @@ class BackupAuthManager(
             val rawValue = applicationInfo.metaData?.getString(key) ?: return null
             val trimmed = rawValue.trim()
             return trimmed.takeIf { it.isNotEmpty() && !it.startsWith("$") }
-        }
-
-        private fun maskSecret(value: String): String {
-            return if (value.length <= 8) {
-                "*".repeat(value.length)
-            } else {
-                "${value.take(6)}***${value.takeLast(4)}"
-            }
         }
     }
 }

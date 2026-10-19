@@ -367,7 +367,6 @@ fun SettingsScreen(
                             BackupAuthNotice.SIGN_IN_SUCCESS -> strings.backupSignInSuccess
                             BackupAuthNotice.SIGN_IN_FAILED -> strings.backupSignInFailed
                             BackupAuthNotice.SIGN_OUT_SUCCESS -> strings.backupSignOutSuccess
-                            BackupAuthNotice.SIGN_OUT_FAILED -> strings.backupSignOutFailed
                             BackupAuthNotice.SIGN_IN_RESTORE_PROMPT -> strings.backupSignInRestorePrompt
                             BackupAuthNotice.SIGN_IN_AUTO_BACKUP_DONE -> strings.backupSignInAutoBackupDone
                             BackupAuthNotice.SIGN_IN_RESTORE_SKIPPED -> strings.backupSignInRestoreSkipped
@@ -376,7 +375,6 @@ fun SettingsScreen(
                             BackupAuthNotice.RESTORE_SUCCESS -> strings.backupRestoreSuccess
                             BackupAuthNotice.RESTORE_FAILED -> strings.backupRestoreFailed
                             BackupAuthNotice.RESTORE_EMPTY -> strings.backupRestoreEmpty
-                            BackupAuthNotice.DELETE_ACCOUNT_SERVER_NOT_CONFIGURED -> strings.backupDeleteAccountServerNotConfigured
                             BackupAuthNotice.DELETE_ACCOUNT_SUCCESS -> strings.backupDeleteAccountSuccess
                             BackupAuthNotice.DELETE_ACCOUNT_FAILED -> strings.backupDeleteAccountFailed
                         },
@@ -384,10 +382,8 @@ fun SettingsScreen(
                         color = if (notice in setOf(
                                 BackupAuthNotice.NOT_CONFIGURED,
                                 BackupAuthNotice.SIGN_IN_FAILED,
-                                BackupAuthNotice.SIGN_OUT_FAILED,
                                 BackupAuthNotice.UPLOAD_FAILED,
                                 BackupAuthNotice.RESTORE_FAILED,
-                                BackupAuthNotice.DELETE_ACCOUNT_SERVER_NOT_CONFIGURED,
                                 BackupAuthNotice.DELETE_ACCOUNT_FAILED,
                             )
                         ) {

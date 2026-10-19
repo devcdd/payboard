@@ -470,8 +470,8 @@ class PayBoardStrings(
         AppLanguage.ENGLISH -> "Cloud Backup"
     }
     val backupNotConfigured: String = when (language) {
-        AppLanguage.KOREAN -> "Supabase 설정값이 없어 백업 로그인을 사용할 수 없습니다."
-        AppLanguage.ENGLISH -> "Supabase keys are missing, so backup sign-in is unavailable."
+        AppLanguage.KOREAN -> "서버 설정값이 없어 백업 로그인을 사용할 수 없습니다."
+        AppLanguage.ENGLISH -> "Server URL is missing, so backup sign-in is unavailable."
     }
     val signInWithKakao: String = when (language) {
         AppLanguage.KOREAN -> "카카오로 로그인"
@@ -496,10 +496,6 @@ class PayBoardStrings(
     val backupSignOutSuccess: String = when (language) {
         AppLanguage.KOREAN -> "로그아웃되었습니다."
         AppLanguage.ENGLISH -> "Signed out successfully."
-    }
-    val backupSignOutFailed: String = when (language) {
-        AppLanguage.KOREAN -> "로그아웃에 실패했습니다."
-        AppLanguage.ENGLISH -> "Failed to sign out."
     }
     val backupLoading: String = when (language) {
         AppLanguage.KOREAN -> "백업 계정 상태를 확인하는 중..."
@@ -560,10 +556,6 @@ class PayBoardStrings(
     val backupRestoreEmpty: String = when (language) {
         AppLanguage.KOREAN -> "복원할 백업이 없습니다."
         AppLanguage.ENGLISH -> "No backup is available to restore."
-    }
-    val backupDeleteAccountServerNotConfigured: String = when (language) {
-        AppLanguage.KOREAN -> "계정 삭제 서버 설정이 없어 계정을 삭제할 수 없습니다."
-        AppLanguage.ENGLISH -> "Account deletion server is not configured."
     }
     val backupDeleteAccountSuccess: String = when (language) {
         AppLanguage.KOREAN -> "계정이 삭제되었습니다."
