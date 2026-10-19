@@ -584,6 +584,7 @@ class BackupAuthManager(
                 put("billing_cycle_kind", JsonPrimitive(kind))
                 put("billing_cycle_days", JsonPrimitive(days))
                 put("next_billing_date", JsonPrimitive(subscription.nextBillingDate.toString()))
+                put("billing_anchor_day", subscription.billingAnchorDay?.let(::JsonPrimitive) ?: JsonNull)
                 if (subscription.lastPaymentDate != null) {
                     put("last_payment_date", JsonPrimitive(subscription.lastPaymentDate.toString()))
                 } else {
@@ -677,6 +678,7 @@ class BackupAuthManager(
         billingCycleKind = string("billing_cycle_kind"),
         billingCycleDays = optionalInt("billing_cycle_days"),
         nextBillingDate = parseInstantValue(string("next_billing_date")),
+        billingAnchorDay = optionalInt("billing_anchor_day"),
         lastPaymentDate = optionalString("last_payment_date")?.let(::parseInstantValue),
         iconKey = string("icon_key"),
         iconColorKey = string("icon_color_key"),
@@ -708,6 +710,7 @@ class BackupAuthManager(
             currencyCode = currencyCode,
             billingCycle = expandBillingCycle(billingCycleKind, billingCycleDays),
             nextBillingDate = nextBillingDate,
+            billingAnchorDay = billingAnchorDay,
             lastPaymentDate = paymentHistoryDates.maxOrNull() ?: lastPaymentDate,
             paymentHistoryDates = paymentHistoryDates,
             iconKey = iconKey,
@@ -781,6 +784,7 @@ class BackupAuthManager(
         val billingCycleKind: String,
         val billingCycleDays: Int?,
         val nextBillingDate: Instant,
+        val billingAnchorDay: Int?,
         val lastPaymentDate: Instant?,
         val iconKey: String,
         val iconColorKey: String,

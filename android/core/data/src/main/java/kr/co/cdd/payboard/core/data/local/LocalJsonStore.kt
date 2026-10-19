@@ -47,6 +47,7 @@ private data class SubscriptionRecord(
     val billingCycleType: String,
     val billingCycleDays: Int? = null,
     val nextBillingDate: String,
+    val billingAnchorDay: Int? = null,
     val lastPaymentDate: String? = null,
     val paymentHistoryDates: List<String> = emptyList(),
     val iconKey: String,
@@ -74,6 +75,7 @@ private fun SubscriptionRecord.toDomain(): Subscription = Subscription(
         else -> BillingCycle.CustomDays(billingCycleDays ?: 30)
     },
     nextBillingDate = Instant.parse(nextBillingDate),
+    billingAnchorDay = billingAnchorDay,
     lastPaymentDate = lastPaymentDate?.let(Instant::parse),
     paymentHistoryDates = paymentHistoryDates.map(Instant::parse),
     iconKey = iconKey,
@@ -102,6 +104,7 @@ private fun Subscription.toRecord(): SubscriptionRecord = SubscriptionRecord(
     },
     billingCycleDays = (billingCycle as? BillingCycle.CustomDays)?.days,
     nextBillingDate = nextBillingDate.toString(),
+    billingAnchorDay = billingAnchorDay,
     lastPaymentDate = lastPaymentDate?.toString(),
     paymentHistoryDates = paymentHistoryDates.map(Instant::toString),
     iconKey = iconKey,

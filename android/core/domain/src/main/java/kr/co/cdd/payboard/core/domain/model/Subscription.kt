@@ -43,6 +43,8 @@ data class Subscription(
     val currencyCode: String = "KRW",
     val billingCycle: BillingCycle,
     val nextBillingDate: Instant,
+    /** 월간·연간 결제의 원래 결제 일자(1..31). null 이면 nextBillingDate 의 일자를 쓴다. */
+    val billingAnchorDay: Int? = null,
     val lastPaymentDate: Instant? = null,
     val paymentHistoryDates: List<Instant> = emptyList(),
     val iconKey: String,

@@ -42,7 +42,9 @@ import kr.co.cdd.payboard.core.designsystem.theme.PayBoardShapes
 import kr.co.cdd.payboard.core.designsystem.theme.payIconColor
 import kr.co.cdd.payboard.core.domain.model.Subscription
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 
 enum class SubscriptionCardSize {
     EXPANDED,
@@ -415,8 +417,11 @@ private fun payMuted(): Color = if (MaterialTheme.colorScheme.background.luminan
     ColorTokens.MutedDark
 }
 
-private fun Instant.daysUntil(reference: Instant = Instant.now()): Int =
-    ((epochSecond - reference.epochSecond) / 86_400L).toInt()
+// 초 단위 차이를 나누면 시각에 따라 하루가 어긋나므로 날짜 단위로 비교
+private fun Instant.daysUntil(): Int {
+    val zone = ZoneId.systemDefault()
+    return ChronoUnit.DAYS.between(LocalDate.now(zone), atZone(zone).toLocalDate()).toInt()
+}
 
 private fun Instant.isSameMonth(reference: Instant): Boolean {
     val zone = ZoneId.systemDefault()

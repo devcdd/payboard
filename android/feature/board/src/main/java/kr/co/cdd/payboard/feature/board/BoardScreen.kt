@@ -106,6 +106,7 @@ import kr.co.cdd.payboard.core.designsystem.theme.PayBoardShapes
 import kr.co.cdd.payboard.core.domain.model.BillingCycle
 import kr.co.cdd.payboard.core.domain.model.Subscription
 import kr.co.cdd.payboard.core.domain.model.SubscriptionCategory
+import kr.co.cdd.payboard.core.domain.usecase.BillingDateCalculator
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import java.math.BigDecimal
@@ -1921,6 +1922,7 @@ private fun SubscriptionEditorSheet(
                                 isAmountUndecided = isAmountUndecided,
                                 billingCycle = billingCycle,
                                 nextBillingDate = parsedDate.toInstantAtStartOfDay(),
+                                billingAnchorDay = base.billingAnchorDay.takeIf { base.nextBillingDate.toLocalDate() == parsedDate },
                                 iconKey = selectedIconKey.ifBlank {
                                     base.iconKey.takeIf { it.isNotBlank() }
                                         ?: name.trim().take(1).uppercase().ifBlank { "?" }
@@ -2704,6 +2706,7 @@ private fun projectedBillingDateInDisplayedMonth(
     val monthStart = displayedMonth.atDay(1)
     val monthEnd = displayedMonth.plusMonths(1).atDay(1)
     val anchor = subscription.nextBillingDate.toLocalDate()
+    val anchorDay = BillingDateCalculator.resolvedAnchorDay(subscription.nextBillingDate, subscription.billingAnchorDay)
 
     if (!anchor.isBefore(monthStart) && anchor.isBefore(monthEnd)) {
         return anchor.toInstantAtStartOfDay()
@@ -2711,14 +2714,14 @@ private fun projectedBillingDateInDisplayedMonth(
 
     return when (val cycle = subscription.billingCycle) {
         BillingCycle.Monthly -> {
-            val projectedDay = anchor.dayOfMonth.coerceAtMost(displayedMonth.lengthOfMonth())
+            val projectedDay = anchorDay.coerceAtMost(displayedMonth.lengthOfMonth())
             LocalDate.of(displayedMonth.year, displayedMonth.month, projectedDay).toInstantAtStartOfDay()
         }
         BillingCycle.Yearly -> {
             if (anchor.month != displayedMonth.month) {
                 null
             } else {
-                val projectedDay = anchor.dayOfMonth.coerceAtMost(displayedMonth.lengthOfMonth())
+                val projectedDay = anchorDay.coerceAtMost(displayedMonth.lengthOfMonth())
                 LocalDate.of(displayedMonth.year, displayedMonth.month, projectedDay).toInstantAtStartOfDay()
             }
         }

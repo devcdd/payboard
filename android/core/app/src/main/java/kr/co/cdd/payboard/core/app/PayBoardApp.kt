@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
@@ -97,6 +98,10 @@ fun PayBoardApp() {
         CompositionLocalProvider(LocalPayBoardStrings provides strings) {
             LaunchedEffect(boardViewModel) {
                 boardViewModel.bootstrapOnAppStart()
+            }
+            LifecycleResumeEffect(boardViewModel) {
+                boardViewModel.onAppResumed()
+                onPauseOrDispose { }
             }
             val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
 

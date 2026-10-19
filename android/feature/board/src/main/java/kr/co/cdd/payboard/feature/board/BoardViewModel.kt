@@ -95,26 +95,51 @@ class BoardViewModel(
 
         viewModelScope.launch {
             runBoardAction {
-                val preferences = userPreferencesRepository.preferences.first()
-                val today = LocalDate.now(ZoneId.systemDefault())
-                val allSubscriptions = repository.fetchAll()
-                val overdueAutoPay = allSubscriptions.filter { subscription ->
-                    subscription.isActive &&
-                        subscription.isAutoPayEnabled &&
-                        subscription.nextBillingDate.toLocalDate() <= today
-                }
-
-                overdueAutoPay.forEach { subscription ->
-                    repository.update(completedSubscription(subscription, Instant.now()))
-                }
-
+                val paidCount = applyDueAutoPayments()
                 val activeSubscriptions = repository.fetchAll().filter(Subscription::isActive)
-                reminderScheduler.syncAll(activeSubscriptions, preferences)
-                if (overdueAutoPay.isNotEmpty()) {
+                reminderScheduler.syncAll(activeSubscriptions, userPreferencesRepository.preferences.first())
+                if (paidCount > 0) {
                     backupAuthManager.autoBackupAfterSubscriptionUpsert()
                 }
             }
         }
+    }
+
+    // ViewModel 이 살아 있는 동안에는 bootstrap 이 다시 돌지 않아, 백그라운드 사이 지난 자동결제를 복귀 시점에 처리
+    fun onAppResumed() {
+        if (!hasBootstrappedOnAppStart) return
+        viewModelScope.launch {
+            runBoardAction {
+                if (applyDueAutoPayments() == 0) return@runBoardAction
+                reminderScheduler.syncAll(
+                    repository.fetchAll().filter(Subscription::isActive),
+                    userPreferencesRepository.preferences.first(),
+                )
+                backupAuthManager.autoBackupAfterSubscriptionUpsert()
+            }
+        }
+    }
+
+    private suspend fun applyDueAutoPayments(): Int {
+        val today = LocalDate.now(ZoneId.systemDefault())
+        val dueItems = repository.fetchAll().filter { subscription ->
+            subscription.isActive &&
+                subscription.isAutoPayEnabled &&
+                subscription.nextBillingDate.toLocalDate() <= today
+        }
+        dueItems.forEach { repository.update(autoPaidSubscription(it, today)) }
+        return dueItems.size
+    }
+
+    // 앱을 오래 열지 않아 밀린 회차를 모두 원래 결제일로 기록하며 오늘 이후까지 넘김
+    private fun autoPaidSubscription(subscription: Subscription, today: LocalDate): Subscription {
+        var current = subscription
+        while (current.nextBillingDate.toLocalDate() <= today) {
+            val advanced = completedSubscription(current, current.nextBillingDate)
+            if (advanced.nextBillingDate <= current.nextBillingDate) break
+            current = advanced
+        }
+        return current.copy(updatedAt = Instant.now())
     }
 
     fun clearError() {
@@ -235,6 +260,7 @@ class BoardViewModel(
                         repository.update(
                             subscription.copy(
                                 nextBillingDate = date,
+                                billingAnchorDay = null,
                                 updatedAt = Instant.now(),
                             ),
                         )
@@ -303,22 +329,28 @@ class BoardViewModel(
     private fun completedSubscription(
         subscription: Subscription,
         paidAt: Instant,
-    ): Subscription = subscription.copy(
-        lastPaymentDate = paidAt,
-        paymentHistoryDates = subscription.paymentHistoryDates + paidAt,
-        nextBillingDate = BillingDateCalculator.advance(subscription.nextBillingDate, subscription.billingCycle),
-        updatedAt = paidAt,
-    )
+    ): Subscription {
+        val anchorDay = BillingDateCalculator.resolvedAnchorDay(subscription.nextBillingDate, subscription.billingAnchorDay)
+        return subscription.copy(
+            lastPaymentDate = paidAt,
+            paymentHistoryDates = subscription.paymentHistoryDates + paidAt,
+            nextBillingDate = BillingDateCalculator.advance(subscription.nextBillingDate, subscription.billingCycle, anchorDay),
+            billingAnchorDay = anchorDay,
+            updatedAt = paidAt,
+        )
+    }
 
     private fun canceledSubscription(subscription: Subscription): Subscription? {
         val remainingHistory = subscription.paymentHistoryDates.sorted().dropLast(1)
         if (subscription.lastPaymentDate == null && remainingHistory.isEmpty()) {
             return null
         }
+        val anchorDay = BillingDateCalculator.resolvedAnchorDay(subscription.nextBillingDate, subscription.billingAnchorDay)
         return subscription.copy(
             paymentHistoryDates = remainingHistory,
             lastPaymentDate = remainingHistory.lastOrNull(),
-            nextBillingDate = BillingDateCalculator.rewind(subscription.nextBillingDate, subscription.billingCycle),
+            nextBillingDate = BillingDateCalculator.rewind(subscription.nextBillingDate, subscription.billingCycle, anchorDay),
+            billingAnchorDay = anchorDay,
             updatedAt = Instant.now(),
         )
     }
