@@ -514,7 +514,11 @@ public struct BoardView: View {
                                 paymentStatusIndicator(for: subscription)
                                 Text(amountText(for: subscription))
                                     .font(.subheadline.weight(.semibold))
+                                    .monospacedDigit()
                                     .foregroundStyle(Color.primary)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.8)
+                                    .frame(width: 96, alignment: .trailing)
                             }
                             .padding(PayBoardSpacing.sm)
                             .background(Color.payCard)
@@ -1384,18 +1388,13 @@ public struct BoardView: View {
         let state = calendarPaymentState(for: subscription, on: selectedCalendarDate)
         switch state {
         case .paid:
-            HStack(spacing: 4) {
-                Circle()
-                    .fill(Color.green)
-                    .frame(width: 7, height: 7)
-                Text("subscription.paymentDone")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(Color.green)
-            }
-            .padding(.horizontal, 7)
-            .padding(.vertical, 4)
-            .background(Color.green.opacity(0.14))
-            .clipShape(Capsule())
+            Text("subscription.paymentDone")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(Color.green)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 4)
+                .background(Color.green.opacity(0.14))
+                .clipShape(Capsule())
         case .pending:
             Circle()
                 .fill(Color.blue)
