@@ -3,6 +3,7 @@ import Foundation
 import FoundationModels
 import Vision
 import Domain
+import Data
 
 @available(iOS 26, macOS 26, *)
 @Generable
@@ -35,18 +36,47 @@ struct SubscriptionDraft {
 }
 
 @available(iOS 26, macOS 26, *)
+@Generable
+struct SubscriptionDraftList {
+    @Guide(description: "언급된 정기결제 항목들. 서비스마다 하나씩")
+    var items: [SubscriptionDraft]
+}
+
+@available(iOS 26, macOS 26, *)
+extension SubscriptionDraft {
+    func subscription(now: Date = .now) -> Subscription {
+        let category = SubscriptionCategory(rawValue: category.rawValue) ?? .other
+        let cycle: BillingCycle = cycle == .yearly ? .yearly : .monthly
+        let amount = amount.flatMap { $0 > 0 ? Decimal($0) : nil }
+        return Subscription(
+            name: name,
+            category: category,
+            amount: amount ?? .zero,
+            isAmountUndecided: amount == nil,
+            billingCycle: cycle,
+            nextBillingDate: billingDay.map { BillingDateCalculator.upcoming(day: $0, month: billingMonth, cycle: cycle, from: now) } ?? now,
+            billingAnchorDay: billingDay,
+            iconKey: PresetIconCatalog.suggestedIcon(forName: name, category: category)?.key ?? "preset_1",
+            isAutoPayEnabled: isAutoPay,
+            memo: memo?.isEmpty == false ? memo : nil
+        )
+    }
+}
+
+@available(iOS 26, macOS 26, *)
 enum SubscriptionDraftParser {
     static var isAvailable: Bool {
         SystemLanguageModel.default.isAvailable
     }
 
-    static func parse(_ text: String) async throws -> SubscriptionDraft {
+    static func parse(_ text: String) async throws -> [SubscriptionDraft] {
         let session = LanguageModelSession(instructions: """
             사용자가 말로 설명한 정기결제(구독, 고정지출) 정보를 양식 필드로 추출한다.
             설명에 없는 값은 추측하지 말고 nil 로 둔다.
             결제 화면 캡처에서 인식한 글자일 수 있으니, 정기결제와 무관한 문구는 무시한다.
+            여러 서비스가 언급되면 각각 별도 항목으로 담는다.
             """)
-        return try await session.respond(to: text, generating: SubscriptionDraft.self).content
+        return try await session.respond(to: text, generating: SubscriptionDraftList.self).content.items
     }
 
     static func recognizeText(in imageData: Data) async throws -> String {

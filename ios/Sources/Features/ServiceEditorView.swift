@@ -35,6 +35,8 @@ public struct ServiceEditorView: View {
     @State private var isParsingAIInput = false
     @State private var aiInputFailed = false
     @State private var aiPhotoItem: PhotosPickerItem?
+    @State private var aiDrafts: [Subscription] = []
+    @State private var aiSelectedIDs: Set<UUID> = []
     @FocusState private var focusedField: FocusedField?
 
     private let allIcons = PresetIconCatalog.all()
@@ -208,7 +210,7 @@ public struct ServiceEditorView: View {
             }
             .sheet(isPresented: $isPresentingAIInput) {
                 aiInputSheet
-                    .presentationDetents([.medium])
+                    .presentationDetents([.medium, .large])
             }
         }
     }
@@ -358,6 +360,16 @@ public struct ServiceEditorView: View {
                         Text("service_editor.ai.footer")
                     }
                 }
+
+                if !aiDrafts.isEmpty {
+                    Section("service_editor.ai.results") {
+                        ForEach(aiDrafts) { draft in
+                            Toggle(isOn: aiSelectionBinding(for: draft.id)) {
+                                aiDraftRow(draft)
+                            }
+                        }
+                    }
+                }
             }
             .onChange(of: aiPhotoItem) { _, item in
                 guard let item else { return }
@@ -377,8 +389,15 @@ public struct ServiceEditorView: View {
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    if isParsingAIInput {
+                    if isParsingAIInput || isSaving {
                         ProgressView()
+                    } else if !aiDrafts.isEmpty {
+                        Button("service_editor.ai.addSelected \(aiSelectedIDs.count)") {
+                            Task {
+                                await saveAIDrafts()
+                            }
+                        }
+                        .disabled(aiSelectedIDs.isEmpty)
                     } else {
                         Button("service_editor.ai.fill") {
                             Task {
@@ -397,10 +416,19 @@ public struct ServiceEditorView: View {
         guard #available(iOS 26, macOS 26, *), !isParsingAIInput else { return }
         isParsingAIInput = true
         aiInputFailed = false
+        aiDrafts = []
         defer { isParsingAIInput = false }
         do {
-            apply(try await SubscriptionDraftParser.parse(aiInputText))
-            isPresentingAIInput = false
+            let drafts = try await SubscriptionDraftParser.parse(aiInputText).map { $0.subscription() }
+            if drafts.count == 1 {
+                apply(drafts[0])
+                isPresentingAIInput = false
+            } else if drafts.isEmpty {
+                aiInputFailed = true
+            } else {
+                aiDrafts = drafts
+                aiSelectedIDs = Set(drafts.map(\.id))
+            }
         } catch {
             aiInputFailed = true
         }
@@ -426,30 +454,64 @@ public struct ServiceEditorView: View {
         #endif
     }
 
-    #if canImport(FoundationModels)
-    @available(iOS 26, macOS 26, *)
-    private func apply(_ draft: SubscriptionDraft) {
+    private func apply(_ draft: Subscription) {
         name = draft.name
         validationMessageKey = nil
-        category = SubscriptionCategory(rawValue: draft.category.rawValue) ?? .other
-        if let amount = draft.amount, amount > 0 {
-            isAmountUndecided = false
-            amountText = Self.groupedAmountText(String(amount))
-        }
-        billingCycle = draft.cycle == .yearly ? .yearly : .monthly
-        if let day = draft.billingDay {
-            nextBillingDate = BillingDateCalculator.upcoming(day: day, month: draft.billingMonth, cycle: billingCycle)
-        }
-        isAutoPayEnabled = draft.isAutoPay
-        if let draftMemo = draft.memo, !draftMemo.isEmpty {
-            memo = draftMemo
-        }
-        if let icon = PresetIconCatalog.suggestedIcon(forName: draft.name, category: category) {
-            selectedIconKey = icon.key
+        category = draft.category
+        isAmountUndecided = false
+        amountText = draft.isAmountUndecided ? "" : Self.formattedAmountInput(from: draft.amount)
+        billingCycle = draft.billingCycle
+        nextBillingDate = draft.nextBillingDate
+        isAutoPayEnabled = draft.isAutoPayEnabled
+        memo = draft.memo ?? memo
+        selectedIconKey = draft.iconKey
+        if let icon = PresetIconCatalog.icon(for: draft.iconKey) {
             query = PresetIconCatalog.localizedDisplayName(for: icon)
         }
     }
-    #endif
+
+    // ponytail: 항목마다 onSave(자동 백업 포함)를 따로 호출. 대량 입력이 잦아지면 일괄 저장 API 로 바꾼다.
+    private func saveAIDrafts() async {
+        guard !isSaving else { return }
+        isSaving = true
+        defer { isSaving = false }
+        for draft in aiDrafts where aiSelectedIDs.contains(draft.id) {
+            await onSave(draft)
+        }
+        isPresentingAIInput = false
+        dismiss()
+    }
+
+    private func aiSelectionBinding(for id: UUID) -> Binding<Bool> {
+        Binding(
+            get: { aiSelectedIDs.contains(id) },
+            set: { isOn in
+                if isOn {
+                    aiSelectedIDs.insert(id)
+                } else {
+                    aiSelectedIDs.remove(id)
+                }
+            }
+        )
+    }
+
+    private func aiDraftRow(_ draft: Subscription) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(draft.name)
+            HStack(spacing: 4) {
+                if draft.isAmountUndecided {
+                    Text("service_editor.amount.variable")
+                } else {
+                    Text(Self.formattedAmountInput(from: draft.amount))
+                    Text("service_editor.amount.suffix")
+                }
+                Text("·")
+                Text(draft.nextBillingDate, format: .dateTime.month().day())
+            }
+            .font(.caption)
+            .foregroundStyle(Color.payMuted)
+        }
+    }
 
     @ViewBuilder
     private var nameField: some View {

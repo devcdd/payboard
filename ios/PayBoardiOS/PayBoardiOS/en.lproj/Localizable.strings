@@ -254,3 +254,5 @@
 "service_editor.ai.fill" = "Fill";
 "service_editor.ai.error" = "Couldn't read the details. Please describe it again.";
 "service_editor.ai.photo" = "Import from a screenshot";
+"service_editor.ai.results" = "Detected items";
+"service_editor.ai.addSelected %lld" = "Add %lld";
