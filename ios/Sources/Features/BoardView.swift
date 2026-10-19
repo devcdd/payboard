@@ -20,7 +20,6 @@ public struct BoardView: View {
     private let displayMode: BoardDisplayMode
     @AppStorage("board.columnsCount") private var columnsCount = 2
     @AppStorage("board.selectedSort") private var selectedSortStorage = BoardSortOption.nextBillingAsc.rawValue
-    @AppStorage("board.selectedFilter") private var selectedFilterStorage = BoardFilter.all.rawValue
     @State private var selectedCalendarDate: Date = .now
     @State private var displayedMonth: Date = .now
     @State private var isPresentingMonthSelector = false
@@ -164,9 +163,6 @@ public struct BoardView: View {
                     isCustomSortEditing = false
                 }
             }
-            .onChange(of: viewModel.selectedFilter) { _, newValue in
-                selectedFilterStorage = newValue.rawValue
-            }
             .sheet(item: $editorSheet) { sheet in
                 ServiceEditorView(original: sheet.originalSubscription) { payload in
                     viewModel.setReminderOptions(Array(settingsViewModel.effectiveReminderOptions))
@@ -270,19 +266,25 @@ public struct BoardView: View {
                         result.1.append(subscription)
                     }
                 }
-                subscriptionGroup("board.section.pending \(pending.count)", subscriptions: pending)
-                subscriptionGroup("board.section.paid \(paid.count)", subscriptions: paid)
+                subscriptionGroup("board.section.pending \(pending.count)", subscriptions: pending, showsSort: true)
+                subscriptionGroup("board.section.paid \(paid.count)", subscriptions: paid, showsSort: pending.isEmpty)
             }
         }
     }
 
     @ViewBuilder
-    private func subscriptionGroup(_ titleKey: LocalizedStringKey, subscriptions: [Subscription]) -> some View {
+    private func subscriptionGroup(_ titleKey: LocalizedStringKey, subscriptions: [Subscription], showsSort: Bool) -> some View {
         if !subscriptions.isEmpty {
-            Text(titleKey)
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(Color.payMuted)
-                .padding(.horizontal, PayBoardSpacing.xs)
+            HStack {
+                Text(titleKey)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(Color.payMuted)
+                Spacer()
+                if showsSort {
+                    sortMenuButton
+                }
+            }
+            .padding(.horizontal, PayBoardSpacing.xs)
             LazyVGrid(columns: columns, spacing: PayBoardSpacing.md) {
                 ForEach(subscriptions) { subscription in
                     subscriptionCard(for: subscription)
@@ -571,43 +573,6 @@ public struct BoardView: View {
                         }
                         .buttonStyle(.plain)
                     } else {
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                isBoardSearchPresented.toggle()
-                            }
-                            if !isBoardSearchPresented {
-                                boardSearchQuery = ""
-                                isBoardSearchFocused = false
-                            }
-                        } label: {
-                            Image(systemName: "magnifyingglass")
-                                .font(.subheadline.weight(.medium))
-                                .frame(width: 32, height: 32)
-                                .background(isBoardSearchPresented ? Color.accentColor.opacity(0.18) : Color.payCard)
-                                .clipShape(Circle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(Text("board.search.toggle"))
-
-                        sortMenuButton
-
-                        Menu {
-                            ForEach(BoardFilter.allCases) { filter in
-                                Button {
-                                    viewModel.selectedFilter = filter
-                                } label: {
-                                    Text(LocalizedStringKey(filter.titleKey))
-                                }
-                            }
-                        } label: {
-                            Image(systemName: "line.3.horizontal.decrease.circle")
-                                .font(.subheadline.weight(.medium))
-                                .frame(width: 32, height: 32)
-                                .background(Color.payCard)
-                                .clipShape(Circle())
-                        }
-                        .accessibilityLabel(Text("board.filter.picker"))
-
                         Menu {
                             Button {
                                 columnsCount = 3
@@ -639,11 +604,31 @@ public struct BoardView: View {
                         } label: {
                             Image(systemName: "square.grid.2x2")
                                 .font(.subheadline.weight(.medium))
+                                .foregroundStyle(Color.primary)
                                 .frame(width: 32, height: 32)
                                 .background(Color.payCard)
                                 .clipShape(Circle())
                         }
                         .accessibilityLabel(Text("board.layout.picker"))
+
+                        Button {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isBoardSearchPresented.toggle()
+                            }
+                            if !isBoardSearchPresented {
+                                boardSearchQuery = ""
+                                isBoardSearchFocused = false
+                            }
+                        } label: {
+                            Image(systemName: "magnifyingglass")
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(Color.primary)
+                                .frame(width: 32, height: 32)
+                                .background(isBoardSearchPresented ? Color.accentColor.opacity(0.18) : Color.payCard)
+                                .clipShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(Text("board.search.toggle"))
                     }
 
                 }
@@ -903,22 +888,7 @@ public struct BoardView: View {
         let monthFiltered = viewModel.subscriptions.filter { subscription in
             isInDisplayedMonth(subscription: subscription, calendar: Calendar.current)
         }
-        let baseByFilter: [Subscription]
-        switch viewModel.selectedFilter {
-        case .all:
-            baseByFilter = monthFiltered
-        case .thisWeek:
-            let today = Calendar.current.startOfDay(for: .now)
-            let weekEnd = Calendar.current.date(byAdding: .day, value: 7, to: today) ?? today
-            baseByFilter = monthFiltered.filter { subscription in
-                let date = Calendar.current.startOfDay(for: subscription.nextBillingDate)
-                return date >= today && date <= weekEnd
-            }
-        case .thisMonth:
-            baseByFilter = monthFiltered
-        }
-
-        let filtered = baseByFilter.filter { subscription in
+        let filtered = monthFiltered.filter { subscription in
             guard !loweredQuery.isEmpty else { return true }
             if subscription.name.lowercased().contains(loweredQuery) { return true }
             if let customCategoryName = subscription.customCategoryName?.lowercased(),
@@ -1012,9 +982,6 @@ public struct BoardView: View {
 
         if let restoredSort = BoardSortOption(rawValue: selectedSortStorage) {
             selectedSort = restoredSort
-        }
-        if let restoredFilter = BoardFilter(rawValue: selectedFilterStorage) {
-            viewModel.selectedFilter = restoredFilter
         }
 
         let sanitized = sanitizedColumnsCount
@@ -1136,11 +1103,13 @@ public struct BoardView: View {
                 }
             }
         } label: {
-            Image(systemName: "arrow.up.arrow.down")
-                .font(.subheadline.weight(.medium))
-                .frame(width: 32, height: 32)
-                .background(Color.payCard)
-                .clipShape(Circle())
+            HStack(spacing: 2) {
+                Text(LocalizedStringKey(selectedSort.titleKey))
+                Image(systemName: "chevron.down")
+                    .imageScale(.small)
+            }
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(Color.payMuted)
         }
         .accessibilityLabel(Text("board.sort.title"))
     }

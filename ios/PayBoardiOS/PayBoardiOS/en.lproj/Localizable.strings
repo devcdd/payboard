@@ -92,14 +92,10 @@
 "board.title" = "Pay Board";
 "board.empty.title" = "No fixed expenses";
 "board.empty.description" = "Add one with the + button in the bottom-right.";
-"board.filter.picker" = "Filter";
 "board.mode.picker" = "View mode";
 "board.mode.board" = "Board";
 "board.mode.calendar" = "Calendar";
-"board.filter.all" = "All";
-"board.filter.thisWeek" = "This Week";
-"board.filter.thisMonth" = "This Month";
-"board.filter.empty" = "No items match the selected filter.";
+"board.filter.empty" = "No items to show.";
 "board.search.placeholder" = "Search fixed expenses";
 "board.sort.title" = "Sort";
 "board.sort.nextBillingAsc" = "Due date (soon)";

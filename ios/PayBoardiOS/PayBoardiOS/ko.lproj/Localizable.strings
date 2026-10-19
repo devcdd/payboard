@@ -92,14 +92,10 @@
 "board.title" = "페이보드";
 "board.empty.title" = "고정지출이 없습니다";
 "board.empty.description" = "오른쪽 하단 + 버튼으로 추가하세요.";
-"board.filter.picker" = "필터";
 "board.mode.picker" = "보기 모드";
 "board.mode.board" = "보드";
 "board.mode.calendar" = "캘린더";
-"board.filter.all" = "전체";
-"board.filter.thisWeek" = "이번주";
-"board.filter.thisMonth" = "이번달";
-"board.filter.empty" = "선택한 필터에 해당하는 항목이 없습니다.";
+"board.filter.empty" = "표시할 항목이 없습니다.";
 "board.search.placeholder" = "고정지출 검색";
 "board.sort.title" = "정렬";
 "board.sort.nextBillingAsc" = "결제일 빠른순";

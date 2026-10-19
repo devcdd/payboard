@@ -7,7 +7,6 @@ import Data
 public final class BoardViewModel: ObservableObject {
     @Published public private(set) var subscriptions: [Subscription] = []
     @Published public private(set) var archivedSubscriptions: [Subscription] = []
-    @Published public var selectedFilter: BoardFilter = .all
     @Published public var errorMessage: String?
 
     private let repository: any SubscriptionRepository
@@ -22,23 +21,6 @@ public final class BoardViewModel: ObservableObject {
     ) {
         self.repository = repository
         self.notificationScheduler = notificationScheduler
-    }
-
-    public var filteredSubscriptions: [Subscription] {
-        let calendar = Calendar.current
-        // 결제일에 시각이 섞여 있어 오늘 결제 항목이 빠지지 않도록 날짜 단위로 비교
-        let now = calendar.startOfDay(for: Date())
-
-        switch selectedFilter {
-        case .all:
-            return subscriptions
-        case .thisWeek:
-            guard let weekEnd = calendar.date(byAdding: .day, value: 7, to: now) else { return subscriptions }
-            return subscriptions.filter { $0.nextBillingDate >= now && $0.nextBillingDate <= weekEnd }
-        case .thisMonth:
-            guard let monthEnd = calendar.date(byAdding: .month, value: 1, to: now) else { return subscriptions }
-            return subscriptions.filter { $0.nextBillingDate >= now && $0.nextBillingDate <= monthEnd }
-        }
     }
 
     public func setReminderOptions(_ options: [ReminderOption]) {
