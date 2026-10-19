@@ -30,6 +30,7 @@ public struct BoardView: View {
     @State private var boardSearchQuery = ""
     @State private var isBoardSearchPresented = false
     @State private var isPresentingVariableItems = false
+    @State private var totalRowHeight: CGFloat = 0
     @State private var selectedSort: BoardSortOption = .nextBillingAsc
     @State private var hasRestoredPersistedViewState = false
     @State private var isSelectionMode = false
@@ -91,6 +92,11 @@ public struct BoardView: View {
                         TapGesture().onEnded {
                             if isBoardSearchFocused {
                                 isBoardSearchFocused = false
+                            }
+                            if isPresentingVariableItems {
+                                withAnimation(.easeOut(duration: 0.15)) {
+                                    isPresentingVariableItems = false
+                                }
                             }
                         }
                     )
@@ -307,20 +313,27 @@ public struct BoardView: View {
                                 .minimumScaleFactor(0.85)
                             if !variableSubscriptions.isEmpty {
                                 Button {
-                                    isPresentingVariableItems = true
+                                    withAnimation(.easeOut(duration: 0.15)) {
+                                        isPresentingVariableItems.toggle()
+                                    }
                                 } label: {
                                     Text(verbatim: "+ α")
                                         .font(.subheadline.weight(.semibold))
                                         .foregroundStyle(Color.accentColor)
                                 }
                                 .buttonStyle(.plain)
-                                .popover(isPresented: $isPresentingVariableItems) {
-                                    variableItemsTooltip
-                                        .presentationCompactAdaptation(.popover)
-                                }
+                            }
+                        }
+                        .onGeometryChange(for: CGFloat.self, of: \.size.height) { totalRowHeight = $0 }
+                        .overlay(alignment: .topLeading) {
+                            if isPresentingVariableItems {
+                                variableItemsTooltip
+                                    .offset(y: totalRowHeight + PayBoardSpacing.xs)
+                                    .transition(.opacity)
                             }
                         }
                     }
+                    .zIndex(1)
                     Spacer()
                     Image(systemName: isDashboardExpanded ? "chevron.up" : "chevron.down")
                         .font(.caption.weight(.semibold))
@@ -356,14 +369,19 @@ public struct BoardView: View {
             .contentShape(RoundedRectangle(cornerRadius: PayBoardRadius.card))
             .onTapGesture {
                     withAnimation(.easeInOut(duration: 0.2)) {
-                        isDashboardExpanded.toggle()
+                        if isPresentingVariableItems {
+                            isPresentingVariableItems = false
+                        } else {
+                            isDashboardExpanded.toggle()
+                        }
                     }
                 }
             .padding(PayBoardSpacing.md)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.payCard)
-            .clipShape(RoundedRectangle(cornerRadius: PayBoardRadius.card))
+            // clipShape 대신 배경만 둥글게 해서 툴팁이 카드 밖으로 나올 수 있게 한다.
+            .background(Color.payCard, in: RoundedRectangle(cornerRadius: PayBoardRadius.card))
         }
+        .zIndex(1)
     }
 
     @ViewBuilder
@@ -948,16 +966,23 @@ public struct BoardView: View {
     }
 
     private var variableItemsTooltip: some View {
-        VStack(alignment: .leading, spacing: PayBoardSpacing.xs) {
+        VStack(alignment: .leading, spacing: PayBoardSpacing.sm) {
             Text("board.dashboard.variableItems")
-                .font(.caption)
-                .foregroundStyle(Color.payMuted)
+                .font(.caption.weight(.semibold))
+                .opacity(0.6)
             ForEach(variableSubscriptions) { subscription in
                 Text(subscription.name)
-                    .font(.subheadline)
+                    .font(.subheadline.weight(.medium))
+                    .lineLimit(1)
             }
         }
-        .padding(PayBoardSpacing.md)
+        // 라이트·다크 모두에서 카드와 대비되도록 전경/배경을 반전한 단색 툴팁
+        .foregroundStyle(Color.payBackground)
+        .padding(.horizontal, PayBoardSpacing.md)
+        .padding(.vertical, PayBoardSpacing.sm + 2)
+        .frame(minWidth: 140, alignment: .leading)
+        .background(Color.primary, in: RoundedRectangle(cornerRadius: PayBoardRadius.control))
+        .fixedSize()
     }
 
     private var formattedMonthlyTotal: String {
