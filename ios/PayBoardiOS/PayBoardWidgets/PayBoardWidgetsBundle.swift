@@ -193,7 +193,7 @@ private struct EarliestThreeWidgetView: View {
                                 .lineLimit(1)
                             Spacer()
                             if family != .systemSmall {
-                                Text(item.nextBillingDate, style: .date)
+                                Text(item.nextBillingDate.koreanDateText)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -293,7 +293,7 @@ private struct SelectedSubscriptionWidgetView: View {
                 Text(item.name)
                     .font(.title3.bold())
                     .lineLimit(1)
-                Text("다음 결제일: \(item.nextBillingDate.formatted(date: .abbreviated, time: .omitted))")
+                Text("다음 결제일: \(item.nextBillingDate.koreanDateText)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
@@ -629,5 +629,12 @@ struct PayBoardWidgetsBundle: WidgetBundle {
         TwoWeekPaymentCalendarWidget()
         ThreeWeekPaymentCalendarWidget()
         PaymentCalendarWidget()
+    }
+}
+
+private extension Date {
+    // 위젯 번들에 한국어 리소스가 없어 기기 언어와 무관하게 영어로 표시되던 것을 고정
+    var koreanDateText: String {
+        formatted(.dateTime.year().month().day().locale(Locale(identifier: "ko_KR")))
     }
 }
