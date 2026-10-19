@@ -29,28 +29,28 @@ private enum WidgetSharedStore {
         return [now] + (1...days).compactMap { calendar.date(byAdding: .day, value: $0, to: today) }
     }
 
-    // 앱 캘린더와 같은 규칙: 다음 결제일은 남은 일수에 따라 색이 바뀌고, 결제 기록이 있는 날은 결제 완료가 우선한다
-    nonisolated static func markers(
+    // 앱 캘린더와 같은 규칙: 다음 결제일은 남은 일수로 상태를 정하고, 결제 기록이 있는 날은 결제 완료로 표시한다
+    nonisolated static func iconItems(
         for subscriptions: [WidgetSubscription],
         from start: Date,
         to end: Date,
         today: Date
-    ) -> [Date: PaymentCalendarMarker] {
+    ) -> [Date: [PaymentCalendarIconItem]] {
         let calendar = Calendar.current
-        var result: [Date: PaymentCalendarMarker] = [:]
+        var result: [Date: [PaymentCalendarIconItem]] = [:]
         for subscription in subscriptions {
             let billingDay = calendar.startOfDay(for: subscription.nextBillingDate)
             if billingDay >= start && billingDay <= end {
                 let marker = PaymentCalendarMarker.upcoming(billingDate: billingDay, today: today, calendar: calendar)
-                result[billingDay] = marker.merged(with: result[billingDay])
+                result[billingDay, default: []].append(PaymentCalendarIconItem(subscriptionID: subscription.id, marker: marker))
             }
             for paymentDate in subscription.paymentDates ?? [] {
                 let paymentDay = calendar.startOfDay(for: paymentDate)
                 guard paymentDay >= start && paymentDay <= end else { continue }
-                result[paymentDay] = PaymentCalendarMarker.paid.merged(with: result[paymentDay])
+                result[paymentDay, default: []].append(PaymentCalendarIconItem(subscriptionID: subscription.id, marker: .paid))
             }
         }
-        return result
+        return result.mapValues(PaymentCalendarIconItem.sorted)
     }
 }
 
@@ -113,31 +113,30 @@ private struct EarliestThreeProvider: TimelineProvider {
     }
 }
 
-private struct EarliestThreeWidgetView: View {
-    @Environment(\.widgetFamily) private var family
-    let entry: EarliestThreeEntry
+private struct WidgetSubscriptionIcon: View {
+    let item: WidgetSubscription
+    let size: CGFloat
 
-    @ViewBuilder
-    private func subscriptionIcon(_ item: WidgetSubscription) -> some View {
-        if let pngData = item.iconPNGData,
-           let iconImage = imageFromPNGData(pngData) {
-            Image(uiImage: iconImage)
-                .resizable()
-                .scaledToFit()
-                .frame(width: 18, height: 18)
-        } else if let asset = item.iconAssetName,
-           !asset.isEmpty,
-           imageAssetExists(asset) {
-            Image(asset)
-                .resizable()
-                .scaledToFit()
-                .frame(width: 18, height: 18)
-        } else {
-            Image(systemName: item.iconSystemSymbol ?? "app.badge")
-                .font(.caption.weight(.semibold))
-                .frame(width: 18, height: 18)
-                .foregroundStyle(Color.payIconTint(for: item.iconColorKey ?? ""))
+    var body: some View {
+        Group {
+            if let pngData = item.iconPNGData,
+               let iconImage = imageFromPNGData(pngData) {
+                Image(uiImage: iconImage)
+                    .resizable()
+                    .scaledToFit()
+            } else if let asset = item.iconAssetName,
+                      !asset.isEmpty,
+                      imageAssetExists(asset) {
+                Image(asset)
+                    .resizable()
+                    .scaledToFit()
+            } else {
+                Image(systemName: item.iconSystemSymbol ?? "app.badge")
+                    .font(.system(size: size * 0.7, weight: .semibold))
+                    .foregroundStyle(Color.payIconTint(for: item.iconColorKey ?? ""))
+            }
         }
+        .frame(width: size, height: size)
     }
 
     private func imageAssetExists(_ name: String) -> Bool {
@@ -155,6 +154,11 @@ private struct EarliestThreeWidgetView: View {
         return nil
         #endif
     }
+}
+
+private struct EarliestThreeWidgetView: View {
+    @Environment(\.widgetFamily) private var family
+    let entry: EarliestThreeEntry
 
     private var startOfToday: Date {
         Calendar.current.startOfDay(for: entry.date)
@@ -193,7 +197,7 @@ private struct EarliestThreeWidgetView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(entry.subscriptions) { item in
                         HStack {
-                            subscriptionIcon(item)
+                            WidgetSubscriptionIcon(item: item, size: 18)
                             Text(item.name)
                                 .lineLimit(1)
                             Spacer()
@@ -332,19 +336,25 @@ struct SelectedSubscriptionWidget: Widget {
 private struct CalendarEntry: TimelineEntry {
     let date: Date
     let monthStart: Date
-    let markers: [Date: PaymentCalendarMarker]
+    let iconItems: [Date: [PaymentCalendarIconItem]]
+    let subscriptionsByID: [String: WidgetSubscription]
 }
 
 private struct WeekRangeEntry: TimelineEntry {
     let date: Date
     let startOfWeek: Date
     let weekCount: Int
-    let markers: [Date: PaymentCalendarMarker]
+    let iconItems: [Date: [PaymentCalendarIconItem]]
+    let subscriptionsByID: [String: WidgetSubscription]
+}
+
+private func subscriptionsByID(_ subscriptions: [WidgetSubscription]) -> [String: WidgetSubscription] {
+    Dictionary(subscriptions.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
 }
 
 private struct CalendarProvider: TimelineProvider {
     func placeholder(in context: Context) -> CalendarEntry {
-        CalendarEntry(date: .now, monthStart: monthStart(from: .now), markers: [:])
+        CalendarEntry(date: .now, monthStart: monthStart(from: .now), iconItems: [:], subscriptionsByID: [:])
     }
 
     func getSnapshot(in context: Context, completion: @escaping (CalendarEntry) -> Void) {
@@ -362,13 +372,9 @@ private struct CalendarProvider: TimelineProvider {
         let end = calendar.dateInterval(of: .month, for: start).flatMap {
             calendar.date(byAdding: .day, value: -1, to: $0.end)
         } ?? start
-        let markers = WidgetSharedStore.markers(
-            for: WidgetSharedStore.subscriptions(asOf: date),
-            from: start,
-            to: end,
-            today: date
-        )
-        return CalendarEntry(date: date, monthStart: start, markers: markers)
+        let subscriptions = WidgetSharedStore.subscriptions(asOf: date)
+        let iconItems = WidgetSharedStore.iconItems(for: subscriptions, from: start, to: end, today: date)
+        return CalendarEntry(date: date, monthStart: start, iconItems: iconItems, subscriptionsByID: subscriptionsByID(subscriptions))
     }
 
     private func monthStart(from date: Date) -> Date {
@@ -380,7 +386,7 @@ private struct WeekRangeProvider: TimelineProvider {
     let weekCount: Int
 
     func placeholder(in context: Context) -> WeekRangeEntry {
-        WeekRangeEntry(date: .now, startOfWeek: startOfWeek(from: .now), weekCount: weekCount, markers: [:])
+        WeekRangeEntry(date: .now, startOfWeek: startOfWeek(from: .now), weekCount: weekCount, iconItems: [:], subscriptionsByID: [:])
     }
 
     func getSnapshot(in context: Context, completion: @escaping (WeekRangeEntry) -> Void) {
@@ -396,13 +402,15 @@ private struct WeekRangeProvider: TimelineProvider {
         let calendar = Calendar.current
         let start = startOfWeek(from: date)
         let end = calendar.date(byAdding: .day, value: (weekCount * 7) - 1, to: start) ?? start
-        let markers = WidgetSharedStore.markers(
-            for: WidgetSharedStore.subscriptions(asOf: date),
-            from: start,
-            to: end,
-            today: date
+        let subscriptions = WidgetSharedStore.subscriptions(asOf: date)
+        let iconItems = WidgetSharedStore.iconItems(for: subscriptions, from: start, to: end, today: date)
+        return WeekRangeEntry(
+            date: date,
+            startOfWeek: start,
+            weekCount: weekCount,
+            iconItems: iconItems,
+            subscriptionsByID: subscriptionsByID(subscriptions)
         )
-        return WeekRangeEntry(date: date, startOfWeek: start, weekCount: weekCount, markers: markers)
     }
 
     private func startOfWeek(from date: Date) -> Date {
@@ -442,8 +450,11 @@ private struct WidgetCalendarDayCell: View {
     let date: Date
     let isToday: Bool
     let isInDisplayedMonth: Bool
-    let marker: PaymentCalendarMarker?
+    let iconItems: [PaymentCalendarIconItem]
+    let subscriptionsByID: [String: WidgetSubscription]
     let circleSize: CGFloat
+    let iconSize: CGFloat
+    let maxIcons: Int
     let font: Font
 
     private var textColor: Color {
@@ -453,7 +464,7 @@ private struct WidgetCalendarDayCell: View {
         if !isInDisplayedMonth {
             return Color.payMuted.opacity(0.55)
         }
-        return .primary
+        return PaymentCalendarIconItem.dayTextColor(for: iconItems) ?? .primary
     }
 
     var body: some View {
@@ -466,9 +477,11 @@ private struct WidgetCalendarDayCell: View {
                     Circle()
                         .fill(isToday ? Color.payAccent.opacity(0.22) : Color.clear)
                 )
-            Circle()
-                .fill(marker?.dotColor ?? Color.clear)
-                .frame(width: 5, height: 5)
+            PaymentCalendarIconRow(items: iconItems, maxIcons: maxIcons, iconSize: iconSize) { item in
+                if let subscription = subscriptionsByID[item.subscriptionID] {
+                    WidgetSubscriptionIcon(item: subscription, size: iconSize)
+                }
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -499,7 +512,7 @@ private struct CalendarWidgetView: View {
 
     var body: some View {
         let calendar = Calendar.current
-        VStack(spacing: PayBoardSpacing.sm) {
+        VStack(spacing: PayBoardSpacing.xs) {
             Text(monthTitle)
                 .font(.headline.weight(.semibold))
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -515,8 +528,11 @@ private struct CalendarWidgetView: View {
                             date: day,
                             isToday: calendar.isDate(day, inSameDayAs: entry.date),
                             isInDisplayedMonth: calendar.isDate(day, equalTo: entry.monthStart, toGranularity: .month),
-                            marker: entry.markers[calendar.startOfDay(for: day)],
-                            circleSize: 30,
+                            iconItems: entry.iconItems[calendar.startOfDay(for: day)] ?? [],
+                            subscriptionsByID: entry.subscriptionsByID,
+                            circleSize: 26,
+                            iconSize: 11,
+                            maxIcons: 2,
                             font: .subheadline
                         )
                     }
@@ -551,8 +567,11 @@ private struct WeekRangeCalendarWidgetView: View {
                             date: day,
                             isToday: calendar.isDate(day, inSameDayAs: entry.date),
                             isInDisplayedMonth: true,
-                            marker: entry.markers[calendar.startOfDay(for: day)],
-                            circleSize: entry.weekCount > 2 ? 22 : 26,
+                            iconItems: entry.iconItems[calendar.startOfDay(for: day)] ?? [],
+                            subscriptionsByID: entry.subscriptionsByID,
+                            circleSize: entry.weekCount > 2 ? 20 : 24,
+                            iconSize: entry.weekCount > 2 ? 10 : 12,
+                            maxIcons: 1,
                             font: .caption
                         )
                     }

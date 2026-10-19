@@ -388,6 +388,9 @@ public struct BoardView: View {
 
     @ViewBuilder
     private var calendarSection: some View {
+        // 날짜 셀마다 다시 계산하지 않도록 한 번만 만든다
+        let iconItemsByDate = calendarIconItemsByDate
+        let subscriptionsByID = subscriptionsByIDString
         VStack(alignment: .leading, spacing: PayBoardSpacing.sm) {
             Text("board.calendar.title")
                 .font(.headline)
@@ -453,10 +456,11 @@ public struct BoardView: View {
                             displayedMonth = monthStart(for: day.date)
                             syncMonthSelectionState()
                         } label: {
+                            let iconItems = iconItemsByDate[dateKey(for: day.date)] ?? []
                             VStack(spacing: 2) {
                                 Text("\(day.day)")
                                     .font(.subheadline.weight(day.isToday ? .bold : (day.isSelected ? .semibold : .regular)))
-                                    .foregroundStyle(dayTextColor(for: day))
+                                    .foregroundStyle(dayTextColor(for: day, iconItems: iconItems))
                                     .frame(width: 32, height: 32)
                                     .background(
                                         Circle()
@@ -471,12 +475,10 @@ public struct BoardView: View {
                                                 lineWidth: 1.5
                                             )
                                     )
-                                if let marker = calendarMarkerByDate[dateKey(for: day.date)] {
-                                    Circle()
-                                        .fill(marker.dotColor)
-                                        .frame(width: 5, height: 5)
-                                } else {
-                                    Color.clear.frame(width: 5, height: 5)
+                                PaymentCalendarIconRow(items: iconItems, maxIcons: 2, iconSize: 12) { item in
+                                    if let subscription = subscriptionsByID[item.subscriptionID] {
+                                        calendarIconView(for: subscription, symbolFont: .system(size: 9, weight: .semibold))
+                                    }
                                 }
                             }
                             .frame(maxWidth: .infinity)
@@ -1321,24 +1323,29 @@ public struct BoardView: View {
         return items
     }
 
-    private var calendarMarkerByDate: [String: PaymentCalendarMarker] {
-        var result: [String: PaymentCalendarMarker] = [:]
+    private var calendarIconItemsByDate: [String: [PaymentCalendarIconItem]] {
+        var result: [String: [PaymentCalendarIconItem]] = [:]
         let calendar = Calendar.current
 
         for subscription in viewModel.subscriptions {
+            let subscriptionID = subscription.id.uuidString
             if calendar.isDate(subscription.nextBillingDate, equalTo: displayedMonthStart, toGranularity: .month) {
-                let key = dateKey(for: subscription.nextBillingDate)
-                let nextMarker = PaymentCalendarMarker.upcoming(billingDate: subscription.nextBillingDate, today: .now, calendar: calendar)
-                result[key] = nextMarker.merged(with: result[key])
+                let marker = PaymentCalendarMarker.upcoming(billingDate: subscription.nextBillingDate, today: .now, calendar: calendar)
+                result[dateKey(for: subscription.nextBillingDate), default: []]
+                    .append(PaymentCalendarIconItem(subscriptionID: subscriptionID, marker: marker))
             }
 
             for paymentDate in paymentHistoryDates(for: subscription) {
                 guard calendar.isDate(paymentDate, equalTo: displayedMonthStart, toGranularity: .month) else { continue }
-                let key = dateKey(for: paymentDate)
-                result[key] = PaymentCalendarMarker.paid.merged(with: result[key])
+                result[dateKey(for: paymentDate), default: []]
+                    .append(PaymentCalendarIconItem(subscriptionID: subscriptionID, marker: .paid))
             }
         }
-        return result
+        return result.mapValues(PaymentCalendarIconItem.sorted)
+    }
+
+    private var subscriptionsByIDString: [String: Subscription] {
+        Dictionary(viewModel.subscriptions.map { ($0.id.uuidString, $0) }, uniquingKeysWith: { first, _ in first })
     }
 
     private func presetIcon(for iconKey: String) -> PresetIcon? {
@@ -1567,12 +1574,15 @@ public struct BoardView: View {
         )
     }
 
-    private func dayTextColor(for day: CalendarDay) -> Color {
+    private func dayTextColor(for day: CalendarDay, iconItems: [PaymentCalendarIconItem]) -> Color {
         if day.isSelected {
             return .payAccent
         }
         if !day.isCurrentMonth {
             return Color.payMuted.opacity(0.55)
+        }
+        if let urgentColor = PaymentCalendarIconItem.dayTextColor(for: iconItems) {
+            return urgentColor
         }
         if day.isToday {
             return .payAccent
@@ -1599,7 +1609,7 @@ public struct BoardView: View {
     }
 
     @ViewBuilder
-    private func calendarIconView(for subscription: Subscription) -> some View {
+    private func calendarIconView(for subscription: Subscription, symbolFont: Font = .caption.weight(.semibold)) -> some View {
         if let presetIcon = presetIcon(for: subscription.iconKey),
            let assetName = presetIcon.assetName {
             Image(assetName)
@@ -1607,7 +1617,7 @@ public struct BoardView: View {
                 .scaledToFit()
         } else {
             Image(systemName: presetIcon(for: subscription.iconKey)?.systemSymbol ?? "app.badge")
-                .font(.caption.weight(.semibold))
+                .font(symbolFont)
                 .foregroundStyle(Color.payIconTint(for: subscription.iconColorKey))
         }
     }
