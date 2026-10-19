@@ -261,3 +261,4 @@
 "board.section.pending %lld" = "Upcoming %lld";
 "board.section.paid %lld" = "Paid %lld";
 "board.search.toggle" = "Search";
+"board.dashboard.variableItems" = "Variable amounts";

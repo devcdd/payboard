@@ -29,6 +29,7 @@ public struct BoardView: View {
     @State private var selectedMonth = Calendar.current.component(.month, from: .now)
     @State private var boardSearchQuery = ""
     @State private var isBoardSearchPresented = false
+    @State private var isPresentingVariableItems = false
     @State private var selectedSort: BoardSortOption = .nextBillingAsc
     @State private var hasRestoredPersistedViewState = false
     @State private var isSelectionMode = false
@@ -299,10 +300,25 @@ public struct BoardView: View {
                         Text("board.dashboard.thisMonthTotal")
                             .font(.caption)
                             .foregroundStyle(Color.payMuted)
-                        Text(formattedMonthlyTotal)
-                            .font(.title3.weight(.semibold))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.85)
+                        HStack(alignment: .firstTextBaseline, spacing: 4) {
+                            Text(formattedMonthlyTotal)
+                                .font(.title3.weight(.semibold))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.85)
+                            if !variableSubscriptions.isEmpty {
+                                Button {
+                                    isPresentingVariableItems = true
+                                } label: {
+                                    Text(verbatim: "+ α")
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(Color.accentColor)
+                                }
+                                .buttonStyle(.plain)
+                                .popover(isPresented: $isPresentingVariableItems) {
+                                    variableItemsTooltip
+                                        .presentationCompactAdaptation(.popover)
+                                }
+                            }
                         }
                     }
                     Spacer()
@@ -925,6 +941,23 @@ public struct BoardView: View {
         monthSubscriptions.reduce(Decimal.zero) { partial, subscription in
             partial + subscription.amount
         }
+    }
+
+    private var variableSubscriptions: [Subscription] {
+        monthSubscriptions.filter(\.isAmountUndecided)
+    }
+
+    private var variableItemsTooltip: some View {
+        VStack(alignment: .leading, spacing: PayBoardSpacing.xs) {
+            Text("board.dashboard.variableItems")
+                .font(.caption)
+                .foregroundStyle(Color.payMuted)
+            ForEach(variableSubscriptions) { subscription in
+                Text(subscription.name)
+                    .font(.subheadline)
+            }
+        }
+        .padding(PayBoardSpacing.md)
     }
 
     private var formattedMonthlyTotal: String {

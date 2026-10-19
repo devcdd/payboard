@@ -261,3 +261,4 @@
 "board.section.pending %lld" = "결제 전 %lld";
 "board.section.paid %lld" = "결제 완료 %lld";
 "board.search.toggle" = "검색";
+"board.dashboard.variableItems" = "변동금액 항목";
