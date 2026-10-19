@@ -30,6 +30,7 @@ public struct ServiceEditorView: View {
     @State private var isPresentingIconSearch = false
     @State private var isSaving = false
     @State private var validationMessageKey: String?
+    @State private var overduePayload: Subscription?
     @State private var isPresentingAIInput = false
     @State private var aiInputText = ""
     @State private var isParsingAIInput = false
@@ -208,6 +209,25 @@ public struct ServiceEditorView: View {
             .sheet(isPresented: $isPresentingIconSearch) {
                 iconSearchSheet
             }
+            .alert(
+                "service_editor.overdue.title",
+                isPresented: Binding(get: { overduePayload != nil }, set: { if !$0 { overduePayload = nil } }),
+                presenting: overduePayload
+            ) { payload in
+                Button("service_editor.overdue.complete") {
+                    Task {
+                        await commit(Self.paidUntilYesterday(payload))
+                    }
+                }
+                Button("service_editor.overdue.keep") {
+                    Task {
+                        await commit(payload)
+                    }
+                }
+                Button("common.cancel", role: .cancel) {}
+            } message: { _ in
+                Text("service_editor.overdue.message")
+            }
             .sheet(isPresented: $isPresentingAIInput) {
                 aiInputSheet
                     .presentationDetents([.medium, .large])
@@ -261,10 +281,27 @@ public struct ServiceEditorView: View {
             updatedAt: .now
         )
 
+        let calendar = Calendar.current
+        if original == nil, calendar.startOfDay(for: nextBillingDate) < calendar.startOfDay(for: .now) {
+            overduePayload = payload
+            return
+        }
+        await commit(payload)
+    }
+
+    private func commit(_ payload: Subscription) async {
         isSaving = true
         defer { isSaving = false }
         await onSave(payload)
         dismiss()
+    }
+
+    // 오늘 결제분은 아직 지난 게 아니므로 어제까지만 완료 처리한다.
+    private static func paidUntilYesterday(_ payload: Subscription) -> Subscription {
+        let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: .now) ?? .now
+        var paid = payload.completedThrough(yesterday)
+        paid.updatedAt = .now
+        return paid
     }
 
     private var sanitizedCustomCategoryName: String? {

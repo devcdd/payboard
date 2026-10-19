@@ -256,3 +256,7 @@
 "service_editor.ai.photo" = "Import from a screenshot";
 "service_editor.ai.results" = "Detected items";
 "service_editor.ai.addSelected %lld" = "Add %lld";
+"service_editor.overdue.title" = "Billing date has passed";
+"service_editor.overdue.message" = "Record past payments as paid and move to the next billing date?";
+"service_editor.overdue.complete" = "Mark as Paid";
+"service_editor.overdue.keep" = "Save as Unpaid";

@@ -256,3 +256,7 @@
 "service_editor.ai.photo" = "결제 화면 캡처에서 불러오기";
 "service_editor.ai.results" = "인식된 항목";
 "service_editor.ai.addSelected %lld" = "%lld개 추가";
+"service_editor.overdue.title" = "결제일이 지났어요";
+"service_editor.overdue.message" = "지난 결제를 결제 완료로 기록하고 다음 결제일로 넘길까요?";
+"service_editor.overdue.complete" = "결제 완료 처리";
+"service_editor.overdue.keep" = "미결제로 저장";
