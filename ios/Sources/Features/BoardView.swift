@@ -901,6 +901,7 @@ public struct BoardView: View {
             return localizedCategory.contains(loweredQuery)
         }
 
+        let customOrderIndexMap = customSortOrderIndexMap
         return filtered.sorted { lhs, rhs in
             if lhs.isPinned != rhs.isPinned {
                 return lhs.isPinned && !rhs.isPinned
@@ -915,8 +916,8 @@ public struct BoardView: View {
             case .amountDesc:
                 return NSDecimalNumber(decimal: lhs.amount).compare(NSDecimalNumber(decimal: rhs.amount)) == .orderedDescending
             case .custom:
-                let leftOrder = customSortOrderIndexMap[lhs.id] ?? Int.max
-                let rightOrder = customSortOrderIndexMap[rhs.id] ?? Int.max
+                let leftOrder = customOrderIndexMap[lhs.id] ?? Int.max
+                let rightOrder = customOrderIndexMap[rhs.id] ?? Int.max
                 if leftOrder == rightOrder {
                     return lhs.createdAt < rhs.createdAt
                 }
@@ -1107,15 +1108,26 @@ public struct BoardView: View {
                 }
             }
         } label: {
-            HStack(spacing: 2) {
-                Text(LocalizedStringKey(selectedSort.titleKey))
-                Image(systemName: "chevron.down")
-                    .imageScale(.small)
+            // 정렬 이름 길이에 따라 라벨 너비가 바뀌면 메뉴가 닫힐 때 위치가 튀므로 가장 긴 옵션 너비로 고정
+            ZStack(alignment: .trailing) {
+                ForEach(BoardSortOption.allCases) { option in
+                    sortMenuLabel(for: option)
+                        .hidden()
+                }
+                sortMenuLabel(for: selectedSort)
             }
             .font(.footnote.weight(.semibold))
             .foregroundStyle(Color.payMuted)
         }
         .accessibilityLabel(Text("board.sort.title"))
+    }
+
+    private func sortMenuLabel(for option: BoardSortOption) -> some View {
+        HStack(spacing: 2) {
+            Text(LocalizedStringKey(option.titleKey))
+            Image(systemName: "chevron.down")
+                .imageScale(.small)
+        }
     }
 
     private func cardActionMenu(for subscription: Subscription, isCompact: Bool = false) -> some View {
