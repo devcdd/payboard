@@ -2,6 +2,7 @@ import SwiftUI
 import Domain
 import Data
 import DesignSystem
+import PhotosUI
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -33,6 +34,7 @@ public struct ServiceEditorView: View {
     @State private var aiInputText = ""
     @State private var isParsingAIInput = false
     @State private var aiInputFailed = false
+    @State private var aiPhotoItem: PhotosPickerItem?
     @FocusState private var focusedField: FocusedField?
 
     private let allIcons = PresetIconCatalog.all()
@@ -344,6 +346,10 @@ public struct ServiceEditorView: View {
                 Section {
                     TextField("service_editor.ai.placeholder", text: $aiInputText, axis: .vertical)
                         .lineLimit(3...6)
+                    PhotosPicker(selection: $aiPhotoItem, matching: .screenshots) {
+                        Label("service_editor.ai.photo", systemImage: "photo")
+                    }
+                    .disabled(isParsingAIInput)
                 } footer: {
                     if aiInputFailed {
                         Text("service_editor.ai.error")
@@ -351,6 +357,13 @@ public struct ServiceEditorView: View {
                     } else {
                         Text("service_editor.ai.footer")
                     }
+                }
+            }
+            .onChange(of: aiPhotoItem) { _, item in
+                guard let item else { return }
+                aiPhotoItem = nil
+                Task {
+                    await fillFromAIPhoto(item)
                 }
             }
             .navigationTitle("service_editor.ai.button")
@@ -391,6 +404,25 @@ public struct ServiceEditorView: View {
         } catch {
             aiInputFailed = true
         }
+        #endif
+    }
+
+    private func fillFromAIPhoto(_ item: PhotosPickerItem) async {
+        #if canImport(FoundationModels)
+        guard #available(iOS 26, macOS 26, *), !isParsingAIInput else { return }
+        isParsingAIInput = true
+        var text: String?
+        if let data = try? await item.loadTransferable(type: Data.self) {
+            text = try? await SubscriptionDraftParser.recognizeText(in: data)
+        }
+        isParsingAIInput = false
+        guard let text, !text.isEmpty else {
+            aiInputFailed = true
+            return
+        }
+        // 인식 결과를 입력란에 남겨 실패 시 사용자가 고쳐서 다시 채울 수 있게 한다.
+        aiInputText = text
+        await fillFromAIInput()
         #endif
     }
 

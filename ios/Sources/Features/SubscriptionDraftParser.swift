@@ -1,6 +1,7 @@
 #if canImport(FoundationModels)
 import Foundation
 import FoundationModels
+import Vision
 import Domain
 
 @available(iOS 26, macOS 26, *)
@@ -43,8 +44,16 @@ enum SubscriptionDraftParser {
         let session = LanguageModelSession(instructions: """
             사용자가 말로 설명한 정기결제(구독, 고정지출) 정보를 양식 필드로 추출한다.
             설명에 없는 값은 추측하지 말고 nil 로 둔다.
+            결제 화면 캡처에서 인식한 글자일 수 있으니, 정기결제와 무관한 문구는 무시한다.
             """)
         return try await session.respond(to: text, generating: SubscriptionDraft.self).content
+    }
+
+    static func recognizeText(in imageData: Data) async throws -> String {
+        var request = RecognizeTextRequest()
+        request.recognitionLanguages = [Locale.Language(identifier: "ko-KR"), Locale.Language(identifier: "en-US")]
+        let observations = try await request.perform(on: imageData)
+        return observations.compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\n")
     }
 }
 #endif
