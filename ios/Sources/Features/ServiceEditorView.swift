@@ -412,7 +412,7 @@ public struct ServiceEditorView: View {
         if let draftMemo = draft.memo, !draftMemo.isEmpty {
             memo = draftMemo
         }
-        if let icon = PresetIconCatalog.search(draft.name).first {
+        if let icon = PresetIconCatalog.suggestedIcon(forName: draft.name, category: category) {
             selectedIconKey = icon.key
             query = PresetIconCatalog.localizedDisplayName(for: icon)
         }

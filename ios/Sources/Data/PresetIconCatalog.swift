@@ -96,6 +96,42 @@ public enum PresetIconCatalog {
         }
     }
 
+    /// 자유 입력된 이름에 어울리는 아이콘. 브랜드가 없으면 카테고리 기본 아이콘, 그것도 없으면 nil.
+    public static func suggestedIcon(forName name: String, category: SubscriptionCategory) -> PresetIcon? {
+        if let icon = search(name).first {
+            return icon
+        }
+        // "넷플릭스 프리미엄"처럼 이름이 별칭보다 긴 경우. 짧은 별칭("ai")이 먼저 걸리지 않게 가장 긴 매칭을 고른다.
+        let normalizedName = normalized(name)
+        let reverseMatch = all()
+            .compactMap { icon -> (PresetIcon, Int)? in
+                let lengths = (localizedDisplayNames(for: icon) + icon.aliases)
+                    .map(normalized)
+                    .filter { !$0.isEmpty && normalizedName.contains($0) }
+                    .map(\.count)
+                return lengths.max().map { (icon, $0) }
+            }
+            .max { $0.1 < $1.1 }
+        if let icon = reverseMatch?.0 {
+            return icon
+        }
+        guard let symbol = categorySymbols[category] else { return nil }
+        return all().first { $0.assetName == nil && $0.systemSymbol == symbol }
+    }
+
+    private static let categorySymbols: [SubscriptionCategory: String] = [
+        .video: "film",
+        .music: "headphones",
+        .productivity: "calendar",
+        .cloud: "cloud",
+        .housing: "house",
+        .shopping: "bag",
+        .gaming: "gamecontroller",
+        .finance: "creditcard",
+        .education: "graduationcap",
+        .health: "heart.text.square"
+    ]
+
     private static func localizedDisplayName(for icon: PresetIcon, languageCode: String) -> String {
         guard let key = icon.displayNameKey else { return icon.displayName }
         guard let path = Bundle.main.path(forResource: languageCode, ofType: "lproj"),
